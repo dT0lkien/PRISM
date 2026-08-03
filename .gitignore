@@ -1,0 +1,14 @@
+node_modules/
+dist/
+out/
+shots/
+
+# Ядро качается скриптом: 100 МБ бинарников не должны попасть в историю git
+resources/core/
+
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,54 @@
+appId: com.prism.vpn
+productName: Prism
+copyright: Prism VPN
+
+directories:
+  buildResources: build
+  output: dist
+
+files:
+  - out/**/*
+  - package.json
+  - '!node_modules/**/*'
+
+extraResources:
+  - from: resources/core/win
+    to: core
+    filter: ['**/*']
+  - from: resources/rules
+    to: rules
+    filter: ['**/*.srs']
+  - from: resources/icons
+    to: icons
+    filter: ['**/*.png']
+
+asar: true
+compression: maximum
+electronLanguages: [en-US, ru-RU]
+
+win:
+  icon: build/icon.ico
+  requestedExecutionLevel: asInvoker
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Prism
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}

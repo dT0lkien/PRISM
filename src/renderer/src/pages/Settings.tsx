@@ -1,0 +1,447 @@
+import { useState } from 'react'
+import {
+  Braces,
+  CheckCircle2,
+  Download,
+  FolderOpen,
+  Info,
+  RotateCcw,
+  ShieldAlert,
+  Unplug
+} from 'lucide-react'
+import { DNS_PRESETS_LOCAL, DNS_PRESETS_REMOTE } from '@shared/defaults'
+import type { AccentName, DnsStrategy, TunStack } from '@shared/types'
+import { ACCENTS, useStore } from '../store'
+import { Modal, Setting, Switch } from '../ui'
+import logo from '../assets/logo.png'
+
+export default function SettingsPage(): JSX.Element {
+  const { snap, patchSettings, info, toast, core } = useStore()
+  const s = snap.settings
+  const [cfgOpen, setCfgOpen] = useState(false)
+  const [cfg, setCfg] = useState('')
+  const [extra, setExtra] = useState(s.extraConfig)
+  const [check, setCheck] = useState<{ ok: boolean; error?: string } | null>(null)
+
+  const showConfig = async (): Promise<void> => {
+    setCfg(await window.prism.config.preview())
+    setCfgOpen(true)
+  }
+
+  const saveExtra = async (): Promise<void> => {
+    const r = await window.prism.config.validate(extra)
+    setCheck(r)
+    if (r.ok) {
+      await patchSettings({ extraConfig: extra })
+      toast('ok', 'Дополнительный конфиг применён')
+    }
+  }
+
+  return (
+    <>
+      <div className="page-head">
+        <h1>Настройки</h1>
+        <p>Тонкая настройка перехвата трафика, DNS и поведения приложения.</p>
+      </div>
+
+      {/* ─── Подключение ─── */}
+      <div className="section-title">Подключение</div>
+      <div className="card pad">
+        <Setting
+          title="Способ перехвата"
+          hint="TUN создаёт виртуальный адаптер и забирает весь трафик, включая UDP. Системный прокси работает без прав администратора, но его учитывают не все программы и он не передаёт UDP."
+        >
+          <select
+            className="select"
+            value={s.captureMode}
+            onChange={(e) => patchSettings({ captureMode: e.target.value as 'tun' | 'proxy' })}
+          >
+            <option value="tun">TUN — весь трафик</option>
+            <option value="proxy">Системный прокси</option>
+          </select>
+        </Setting>
+
+        <Setting
+          title="Локальный порт"
+          hint="SOCKS5 и HTTP на одном порту. Открыт всегда — можно указывать вручную в любой программе."
+        >
+          <input
+            className="input"
+            type="number"
+            min={1024}
+            max={65535}
+            value={s.localPort}
+            onChange={(e) => patchSettings({ localPort: Number(e.target.value) || 2080 })}
+          />
+        </Setting>
+
+        <Setting title="Разрешить доступ из локальной сети" hint="Другие устройства смогут пользоваться этим прокси">
+          <Switch on={s.allowLan} onChange={(v) => patchSettings({ allowLan: v })} />
+        </Setting>
+
+        <Setting
+          title="Локальная сеть напрямую"
+          hint="Роутер, принтеры, NAS и другие устройства сети остаются доступными в обход туннеля"
+        >
+          <Switch on={s.bypassPrivate} onChange={(v) => patchSettings({ bypassPrivate: v })} />
+        </Setting>
+
+        <Setting
+          title="Блокировать QUIC"
+          hint="Отбрасывает UDP на 443 порту. Браузеры и CDN откатываются на TCP, который проксируется надёжнее — частое лекарство от «не грузятся картинки». Голосовые порты Discord не затрагиваются."
+        >
+          <Switch on={s.blockQuic} onChange={(v) => patchSettings({ blockQuic: v })} />
+        </Setting>
+
+        <Setting
+          title="Discord Fix"
+          hint="Все процессы Discord и его домены идут в туннель целиком, вместе с голосовым UDP, а DNS для них разрешается через прокси"
+        >
+          <Switch on={s.discordFix} onChange={(v) => patchSettings({ discordFix: v })} />
+        </Setting>
+      </div>
+
+      {/* ─── TUN ─── */}
+      <div className="section-title">Режим TUN</div>
+      <div className="card pad" style={{ opacity: s.captureMode === 'tun' ? 1 : 0.55 }}>
+        <Setting
+          title="Сетевой стек"
+          hint="mixed — оптимальный по умолчанию. gvisor надёжнее в необычных сетях, system быстрее, но капризнее."
+        >
+          <select
+            className="select"
+            value={s.tun.stack}
+            onChange={(e) => patchSettings({ tun: { ...s.tun, stack: e.target.value as TunStack } })}
+          >
+            <option value="mixed">mixed</option>
+            <option value="gvisor">gvisor</option>
+            <option value="system">system</option>
+          </select>
+        </Setting>
+
+        <Setting title="MTU" hint="Уменьшите до 1400–1500, если часть сайтов открывается наполовину">
+          <input
+            className="input"
+            type="number"
+            min={576}
+            max={9000}
+            value={s.tun.mtu}
+            onChange={(e) => patchSettings({ tun: { ...s.tun, mtu: Number(e.target.value) || 9000 } })}
+          />
+        </Setting>
+
+        <Setting title="Строгая маршрутизация" hint="Не даёт трафику утечь мимо туннеля в обход правил">
+          <Switch on={s.tun.strictRoute} onChange={(v) => patchSettings({ tun: { ...s.tun, strictRoute: v } })} />
+        </Setting>
+
+        <Setting title="IPv6 в туннеле" hint="Включайте, только если ваш сервер действительно поддерживает IPv6">
+          <Switch on={s.tun.ipv6} onChange={(v) => patchSettings({ tun: { ...s.tun, ipv6: v } })} />
+        </Setting>
+      </div>
+
+      {/* ─── DNS ─── */}
+      <div className="section-title">DNS</div>
+      <div className="card pad">
+        <Setting title="Через туннель" hint="Разрешает имена на той стороне — провайдер не видит запросы и не подменяет ответы">
+          <input
+            className="input"
+            list="dns-remote"
+            value={s.dns.remote}
+            onChange={(e) => patchSettings({ dns: { ...s.dns, remote: e.target.value } })}
+          />
+          <datalist id="dns-remote">
+            {DNS_PRESETS_REMOTE.map((d) => (
+              <option key={d.value} value={d.value}>
+                {d.label}
+              </option>
+            ))}
+          </datalist>
+        </Setting>
+
+        <Setting title="Напрямую" hint="Используется для российских сайтов и адреса самого VPN-сервера">
+          <input
+            className="input"
+            list="dns-local"
+            value={s.dns.local}
+            onChange={(e) => patchSettings({ dns: { ...s.dns, local: e.target.value } })}
+          />
+          <datalist id="dns-local">
+            {DNS_PRESETS_LOCAL.map((d) => (
+              <option key={d.value} value={d.value}>
+                {d.label}
+              </option>
+            ))}
+          </datalist>
+        </Setting>
+
+        <Setting title="Приоритет адресов">
+          <select
+            className="select"
+            value={s.dns.strategy}
+            onChange={(e) => patchSettings({ dns: { ...s.dns, strategy: e.target.value as DnsStrategy } })}
+          >
+            <option value="prefer_ipv4">Сначала IPv4</option>
+            <option value="prefer_ipv6">Сначала IPv6</option>
+            <option value="ipv4_only">Только IPv4</option>
+            <option value="ipv6_only">Только IPv6</option>
+          </select>
+        </Setting>
+
+        <Setting
+          title="Российские домены — местным DNS"
+          hint="Быстрее и корректнее для сайтов с российскими CDN"
+        >
+          <Switch on={s.dns.splitDns} onChange={(v) => patchSettings({ dns: { ...s.dns, splitDns: v } })} />
+        </Setting>
+
+        <Setting
+          title="Fake-IP"
+          hint="Точное совпадение правил по доменам ценой возможных проблем у игр и программ, которые кэшируют адреса сами"
+        >
+          <Switch on={s.dns.fakeIp} onChange={(v) => patchSettings({ dns: { ...s.dns, fakeIp: v } })} />
+        </Setting>
+
+        <Setting title="Резать рекламу на уровне DNS" hint="Рекламные домены не будут разрешаться вовсе">
+          <Switch on={s.dns.blockAds} onChange={(v) => patchSettings({ dns: { ...s.dns, blockAds: v } })} />
+        </Setting>
+      </div>
+
+      {/* ─── Приложение ─── */}
+      <div className="section-title">Приложение</div>
+      <div className="card pad">
+        <Setting title="Запускать вместе с Windows">
+          <Switch on={s.autoStart} onChange={(v) => patchSettings({ autoStart: v })} />
+        </Setting>
+
+        <Setting
+          title="Автозапуск с правами администратора"
+          hint="Создаёт задачу в планировщике, чтобы TUN поднимался при входе в систему без окна UAC. Требует подтверждения один раз."
+        >
+          <Switch
+            on={s.startElevated}
+            disabled={!s.autoStart}
+            onChange={async (v) => {
+              await patchSettings({ startElevated: v })
+              const r = await window.prism.system.setAutoStart(s.autoStart, v)
+              if (!r.ok) toast('error', r.error ?? 'Не удалось настроить автозапуск')
+              else if (v) toast('ok', 'Задача автозапуска создана')
+            }}
+          />
+        </Setting>
+
+        <Setting title="Подключаться при запуске">
+          <Switch on={s.autoConnect} onChange={(v) => patchSettings({ autoConnect: v })} />
+        </Setting>
+
+        <Setting title="Запускать свёрнутым в трей">
+          <Switch on={s.startMinimized} onChange={(v) => patchSettings({ startMinimized: v })} />
+        </Setting>
+
+        <Setting title="Сворачивать в трей" hint="Кнопка «свернуть» прячет окно в область уведомлений">
+          <Switch on={s.minimizeToTray} onChange={(v) => patchSettings({ minimizeToTray: v })} />
+        </Setting>
+
+        <Setting title="Закрытие окна не выключает VPN" hint="Приложение продолжит работать в трее">
+          <Switch on={s.closeToTray} onChange={(v) => patchSettings({ closeToTray: v })} />
+        </Setting>
+      </div>
+
+      {/* ─── Внешний вид ─── */}
+      <div className="section-title">Внешний вид</div>
+      <div className="card pad">
+        <Setting title="Тема">
+          <select
+            className="select"
+            value={s.theme}
+            onChange={(e) => patchSettings({ theme: e.target.value as 'dark' | 'light' })}
+          >
+            <option value="dark">Тёмная</option>
+            <option value="light">Светлая</option>
+          </select>
+        </Setting>
+
+        <div className="setting">
+          <div className="txt">
+            <b>Акцент</b>
+            <span>Цвет кнопок, графиков и подсветки</span>
+          </div>
+          <div className="ctl row" style={{ gap: 7 }}>
+            {(Object.keys(ACCENTS) as AccentName[]).map((a) => (
+              <button
+                key={a}
+                onClick={() => patchSettings({ accent: a })}
+                title={a}
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 8,
+                  background: `linear-gradient(135deg, ${ACCENTS[a][0]}, ${ACCENTS[a][1]})`,
+                  border: s.accent === a ? '2px solid var(--text)' : '2px solid transparent',
+                  outline: s.accent === a ? '1px solid var(--line-2)' : 'none',
+                  transition: 'transform .15s'
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Дополнительно ─── */}
+      <div className="section-title">Дополнительно</div>
+      <div className="card pad">
+        <Setting title="Подробность журнала">
+          <select
+            className="select"
+            value={s.logLevel}
+            onChange={(e) => patchSettings({ logLevel: e.target.value as typeof s.logLevel })}
+          >
+            <option value="trace">trace</option>
+            <option value="debug">debug</option>
+            <option value="info">info</option>
+            <option value="warn">warn</option>
+            <option value="error">error</option>
+          </select>
+        </Setting>
+
+        <div className="setting" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
+          <div className="txt">
+            <b>Свой JSON поверх конфига</b>
+            <span>
+              Объект сливается с тем, что генерирует Prism, — можно доопределить или переопределить любую секцию
+              sing-box. Массивы заменяются целиком.
+            </span>
+          </div>
+          <textarea
+            className="input"
+            style={{ minHeight: 120 }}
+            placeholder={'{\n  "experimental": {\n    "clash_api": { "external_ui": "" }\n  }\n}'}
+            value={extra}
+            onChange={(e) => {
+              setExtra(e.target.value)
+              setCheck(null)
+            }}
+            spellCheck={false}
+          />
+          <div className="row">
+            {check && (
+              <span className={`chip ${check.ok ? 'ok' : 'err'}`}>
+                {check.ok ? <CheckCircle2 size={12} /> : <ShieldAlert size={12} />}
+                {check.ok ? 'Конфиг проходит проверку' : check.error}
+              </span>
+            )}
+            <div className="grow" />
+            <button className="btn" onClick={saveExtra}>
+              Проверить и применить
+            </button>
+          </div>
+        </div>
+
+        <div className="setting">
+          <div className="txt">
+            <b>Инструменты</b>
+            <span>Просмотр итогового конфига, сохранение и обслуживание</span>
+          </div>
+          <div className="ctl row wrap" style={{ gap: 7, justifyContent: 'flex-end' }}>
+            <button className="btn sm" onClick={showConfig}>
+              <Braces size={14} />
+              Показать конфиг
+            </button>
+            <button
+              className="btn sm"
+              onClick={async () => {
+                const p = await window.prism.config.export()
+                if (p) toast('ok', 'Сохранено')
+              }}
+            >
+              <Download size={14} />
+              Экспорт
+            </button>
+            <button className="btn sm" onClick={() => window.prism.system.openDataDir()}>
+              <FolderOpen size={14} />
+              Папка данных
+            </button>
+            <button className="btn sm" onClick={() => window.prism.system.resetSystemProxy()}>
+              <Unplug size={14} />
+              Сбросить системный прокси
+            </button>
+          </div>
+        </div>
+
+        <Setting title="Сбросить все настройки" hint="Серверы и подписки останутся на месте">
+          <button
+            className="btn danger sm"
+            onClick={async () => {
+              useStore.getState().setSnap(await window.prism.settings.reset())
+              setExtra('')
+              toast('ok', 'Настройки сброшены')
+            }}
+          >
+            <RotateCcw size={14} />
+            Сбросить
+          </button>
+        </Setting>
+      </div>
+
+      {/* ─── О программе ─── */}
+      <div className="section-title">О программе</div>
+      <div className="card pad">
+        <div className="row" style={{ gap: 15 }}>
+          <img src={logo} width={52} height={52} style={{ borderRadius: 13 }} alt="" />
+          <div className="grow col" style={{ gap: 3 }}>
+            <b style={{ fontSize: 15 }}>Prism {info?.appVersion}</b>
+            <span className="mut" style={{ fontSize: 12.5 }}>
+              Ядро sing-box {info?.coreVersion} · {info?.elevated ? 'права администратора есть' : 'обычные права'}
+            </span>
+            <span className="dim" style={{ fontSize: 12 }}>
+              Списки маршрутизации вшиты в приложение — VPN поднимется, даже если GitHub недоступен.
+            </span>
+          </div>
+          <span className={`chip ${core.status === 'running' ? 'ok' : ''}`}>
+            <Info size={12} />
+            {core.status === 'running' ? 'работает' : 'остановлено'}
+          </span>
+        </div>
+      </div>
+
+      <Modal
+        open={cfgOpen}
+        onClose={() => setCfgOpen(false)}
+        wide
+        title="Итоговый конфиг sing-box"
+        icon={<Braces size={17} className="mut" />}
+        footer={
+          <button
+            className="btn"
+            onClick={() => {
+              void window.prism.system.clipboardWrite(cfg)
+              toast('ok', 'Скопировано')
+            }}
+          >
+            Копировать
+          </button>
+        }
+      >
+        <p className="dim" style={{ fontSize: 12 }}>
+          Ровно это Prism передаёт ядру. Правила идут сверху вниз, срабатывает первое подходящее.
+        </p>
+        <pre
+          className="mono"
+          style={{
+            fontSize: 11,
+            lineHeight: 1.55,
+            background: 'var(--panel)',
+            border: '1px solid var(--line)',
+            borderRadius: 'var(--r)',
+            padding: 14,
+            maxHeight: '52vh',
+            overflow: 'auto',
+            userSelect: 'text',
+            whiteSpace: 'pre'
+          }}
+        >
+          {cfg}
+        </pre>
+      </Modal>
+    </>
+  )
+}
