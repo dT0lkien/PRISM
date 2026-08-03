@@ -148,7 +148,7 @@ export interface Settings {
   closeToTray: boolean
   startMinimized: boolean
 
-  theme: 'dark' | 'light'
+  theme: ThemeName
   accent: AccentName
   language: 'ru' | 'en'
   logLevel: 'trace' | 'debug' | 'info' | 'warn' | 'error'
@@ -159,6 +159,7 @@ export interface Settings {
   manualConfig: boolean
 }
 
+export type ThemeName = 'dark' | 'light' | 'aero'
 export type AccentName = 'aurora' | 'violet' | 'ember' | 'ocean' | 'rose' | 'lime'
 
 /* ─────────────────────────── Рантайм ─────────────────────────── */

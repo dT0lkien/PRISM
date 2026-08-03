@@ -10,10 +10,54 @@ import {
   Unplug
 } from 'lucide-react'
 import { DNS_PRESETS_LOCAL, DNS_PRESETS_REMOTE } from '@shared/defaults'
-import type { AccentName, DnsStrategy, TunStack } from '@shared/types'
+import type { AccentName, DnsStrategy, ThemeName, TunStack } from '@shared/types'
 import { ACCENTS, useStore } from '../store'
 import { Modal, Setting, Switch } from '../ui'
 import logo from '../assets/logo.png'
+
+const THEMES: { id: ThemeName; label: string; hint: string }[] = [
+  { id: 'dark', label: 'Тёмная', hint: 'По умолчанию' },
+  { id: 'light', label: 'Светлая', hint: 'Для яркого света' },
+  { id: 'aero', label: 'Aero', hint: 'В духе XP и Vista' }
+]
+
+/** Маленький макет окна — понятнее, чем название темы в списке */
+function ThemePreview({ id }: { id: ThemeName }): JSX.Element {
+  const skin =
+    id === 'dark'
+      ? { bg: 'linear-gradient(160deg,#0e1421,#070a11)', bar: 'rgba(255,255,255,.07)', card: 'rgba(255,255,255,.07)', line: 'rgba(255,255,255,.16)', radius: 4 }
+      : id === 'light'
+        ? { bg: 'linear-gradient(160deg,#f7f9fc,#e8ecf4)', bar: 'rgba(15,23,42,.06)', card: '#fff', line: 'rgba(15,23,42,.14)', radius: 4 }
+        : { bg: 'linear-gradient(170deg,#a9cff0,#4f86c6)', bar: 'rgba(255,255,255,.65)', card: 'rgba(255,255,255,.8)', line: 'rgba(11,42,92,.3)', radius: 2 }
+
+  const glossy = id === 'aero'
+  return (
+    <span className="theme-preview" style={{ background: skin.bg }}>
+      <span style={{ position: 'absolute', inset: 0, height: 11, background: skin.bar, borderBottom: `1px solid ${skin.line}` }} />
+      <span
+        style={{
+          position: 'absolute', left: 7, top: 18, width: 26, bottom: 8,
+          background: skin.card, border: `1px solid ${skin.line}`, borderRadius: skin.radius
+        }}
+      />
+      <span
+        style={{
+          position: 'absolute', left: 39, top: 18, right: 7, height: 13, borderRadius: skin.radius,
+          border: glossy ? '1px solid color-mix(in srgb, var(--accent-1) 65%, #000)' : 'none',
+          background: glossy
+            ? 'linear-gradient(180deg, color-mix(in srgb, var(--accent-1) 40%, #fff) 0%, color-mix(in srgb, var(--accent-1) 85%, #fff) 48%, color-mix(in srgb, var(--accent-1) 90%, #000) 52%, color-mix(in srgb, var(--accent-1) 65%, #fff) 100%)'
+            : 'linear-gradient(90deg, var(--accent-1), var(--accent-2))'
+        }}
+      />
+      <span
+        style={{
+          position: 'absolute', left: 39, top: 36, right: 7, bottom: 8, borderRadius: skin.radius,
+          background: skin.card, border: `1px solid ${skin.line}`
+        }}
+      />
+    </span>
+  )
+}
 
 export default function SettingsPage(): JSX.Element {
   const { snap, patchSettings, info, toast, core } = useStore()
@@ -249,16 +293,25 @@ export default function SettingsPage(): JSX.Element {
       {/* ─── Внешний вид ─── */}
       <div className="section-title">Внешний вид</div>
       <div className="card pad">
-        <Setting title="Тема">
-          <select
-            className="select"
-            value={s.theme}
-            onChange={(e) => patchSettings({ theme: e.target.value as 'dark' | 'light' })}
-          >
-            <option value="dark">Тёмная</option>
-            <option value="light">Светлая</option>
-          </select>
-        </Setting>
+        <div className="setting stack" style={{ gap: 12 }}>
+          <div className="txt">
+            <b>Тема</b>
+            <span>Общее оформление окна</span>
+          </div>
+          <div className="theme-grid">
+            {THEMES.map((t) => (
+              <button
+                key={t.id}
+                className={`theme-card${s.theme === t.id ? ' active' : ''}`}
+                onClick={() => patchSettings({ theme: t.id })}
+              >
+                <ThemePreview id={t.id} />
+                <span className="name">{t.label}</span>
+                <span className="hint">{t.hint}</span>
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="setting">
           <div className="txt">
@@ -303,7 +356,7 @@ export default function SettingsPage(): JSX.Element {
           </select>
         </Setting>
 
-        <div className="setting" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
+        <div className="setting stack" style={{ gap: 10 }}>
           <div className="txt">
             <b>Свой JSON поверх конфига</b>
             <span>

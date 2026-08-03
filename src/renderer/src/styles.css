@@ -53,6 +53,179 @@
   --shadow-lg: 0 24px 60px rgba(15, 23, 42, 0.14);
 }
 
+/* ═══ Aero — стекло Windows Vista и глянец XP ═══
+   Мелкие радиусы, вертикальные градиенты, светлая фаска сверху,
+   утопленные поля ввода — то, чем эти системы и запоминались. */
+[data-theme='aero'] {
+  --bg: #4f86c6;
+  --bg-2: #8fbdea;
+  --panel: rgba(255, 255, 255, 0.62);
+  --panel-2: rgba(255, 255, 255, 0.82);
+  --panel-3: rgba(11, 42, 92, 0.12);
+  --line: rgba(255, 255, 255, 0.8);
+  --line-2: rgba(11, 42, 92, 0.26);
+  --text: #0b2145;
+  --muted: #2d4c78;
+  --dim: #4a6c9b;
+  --scrim: linear-gradient(180deg, rgba(214, 233, 250, 0.5), rgba(168, 205, 240, 0.62) 55%, rgba(126, 175, 224, 0.7));
+
+  --ok: #2e9e4f;
+  --warn: #d98a00;
+  --err: #c9342b;
+
+  --r-sm: 3px;
+  --r: 5px;
+  --r-lg: 7px;
+  --r-xl: 10px;
+
+  --shadow: 0 2px 8px rgba(11, 42, 92, 0.22);
+  --shadow-lg: 0 12px 40px rgba(11, 42, 92, 0.35);
+
+  --font: Tahoma, 'Segoe UI', 'Trebuchet MS', Verdana, system-ui, sans-serif;
+  --gloss: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 255, 255, 0.62) 48%,
+    rgba(214, 232, 249, 0.55) 52%,
+    rgba(255, 255, 255, 0.72) 100%
+  );
+  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 -1px 0 rgba(11, 42, 92, 0.08);
+  /* Светлый акцент + белый текст = нечитаемо, поэтому подмешиваем тёмно-синий */
+  --sel: color-mix(in srgb, var(--accent-1) 35%, #0a2a6b);
+  --gloss-sel: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--sel) 84%, #fff) 0%,
+    var(--sel) 46%,
+    color-mix(in srgb, var(--sel) 76%, #000) 54%,
+    color-mix(in srgb, var(--sel) 92%, #fff) 100%
+  );
+}
+
+[data-theme='aero'] body {
+  font-size: 13px;
+}
+[data-theme='aero'] .aurora {
+  opacity: 0.5;
+  filter: blur(130px);
+}
+[data-theme='aero'] .aurora span {
+  mix-blend-mode: screen;
+}
+
+/* стеклянные панели с бликом по верхней кромке */
+[data-theme='aero'] .card,
+[data-theme='aero'] .app-row,
+[data-theme='aero'] .node,
+[data-theme='aero'] .rule,
+[data-theme='aero'] .preset {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.5));
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--bevel), 0 1px 4px rgba(11, 42, 92, 0.16);
+}
+
+[data-theme='aero'] .titlebar {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(176, 210, 243, 0.45));
+  border-bottom: 1px solid rgba(11, 42, 92, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+[data-theme='aero'] .sidebar {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.52), rgba(233, 244, 254, 0.34));
+  border-right: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+/* кнопки: глянец с перегибом посередине */
+[data-theme='aero'] .btn,
+[data-theme='aero'] .select {
+  background: var(--gloss);
+  border-color: rgba(11, 42, 92, 0.3);
+  box-shadow: var(--bevel);
+  color: var(--text);
+}
+[data-theme='aero'] .seg,
+[data-theme='aero'] .act-seg {
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(11, 42, 92, 0.28);
+  box-shadow: inset 0 1px 3px rgba(11, 42, 92, 0.15);
+}
+[data-theme='aero'] .btn:hover:not(:disabled) {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 1) 0%,
+    rgba(226, 241, 255, 0.9) 48%,
+    rgba(190, 222, 250, 0.85) 52%,
+    rgba(232, 245, 255, 0.95) 100%
+  );
+  border-color: color-mix(in oklab, var(--accent-1) 55%, transparent);
+}
+[data-theme='aero'] .btn:active:not(:disabled) {
+  box-shadow: inset 0 2px 4px rgba(11, 42, 92, 0.22);
+}
+[data-theme='aero'] .btn.primary {
+  background: var(--gloss-sel);
+  border-color: color-mix(in srgb, var(--sel) 70%, #000);
+  color: #fff;
+  text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.35);
+}
+[data-theme='aero'] .btn.danger {
+  color: var(--err);
+}
+
+/* утопленные поля ввода — фирменная деталь XP */
+[data-theme='aero'] .input,
+[data-theme='aero'] textarea.input {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(11, 42, 92, 0.35);
+  box-shadow: inset 0 2px 3px rgba(11, 42, 92, 0.16);
+}
+[data-theme='aero'] .input:focus {
+  border-color: var(--accent-1);
+  box-shadow: inset 0 2px 3px rgba(11, 42, 92, 0.12), 0 0 0 3px color-mix(in oklab, var(--accent-1) 26%, transparent);
+}
+
+/* выделение в меню и сегментах — синяя глянцевая заливка */
+[data-theme='aero'] .nav-item .glow,
+[data-theme='aero'] .seg .pill,
+[data-theme='aero'] .act-seg .pill {
+  background: var(--gloss-sel);
+  border: 1px solid color-mix(in srgb, var(--sel) 70%, #000);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+[data-theme='aero'] .nav-item.active,
+[data-theme='aero'] .seg button.active,
+[data-theme='aero'] .act-seg button.active {
+  color: #fff;
+  text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.3);
+}
+
+[data-theme='aero'] .chip {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(11, 42, 92, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+[data-theme='aero'] .table th {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(219, 236, 251, 0.9));
+  color: var(--muted);
+  border-bottom: 1px solid rgba(11, 42, 92, 0.25);
+}
+[data-theme='aero'] .logs {
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: inset 0 2px 4px rgba(11, 42, 92, 0.12);
+}
+[data-theme='aero'] .modal {
+  background: linear-gradient(180deg, rgba(246, 251, 255, 0.97), rgba(223, 238, 252, 0.97));
+  border-color: rgba(255, 255, 255, 0.9);
+}
+[data-theme='aero'] .win-controls button:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+[data-theme='aero'] .section-title {
+  color: var(--muted);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+[data-theme='aero'] .page-head h1 {
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -600,6 +773,8 @@ textarea.input {
 .seg {
   display: inline-flex;
   flex-wrap: wrap;
+  /* без своей области наложения .pill (z-index:-1) уезжает за фон родителя */
+  isolation: isolate;
   /* не даём себя сжать: внутри nowrap-текст, при сжатии он вылезал за границы */
   flex-shrink: 0;
   max-width: 100%;
@@ -703,6 +878,16 @@ textarea.input {
 .setting .txt {
   flex: 1 1 240px;
   min-width: 180px;
+}
+/* Вертикальный вариант: в колонке flex-basis сработал бы как высота */
+.setting.stack {
+  flex-direction: column;
+  align-items: stretch;
+  /* колонка + wrap = перенос в колонки, высота начинает жить своей жизнью */
+  flex-wrap: nowrap;
+}
+.setting.stack .txt {
+  flex: 0 0 auto;
 }
 .setting .txt b {
   font-weight: 550;
@@ -930,7 +1115,7 @@ textarea.input {
 
 .graph {
   width: 100%;
-  height: 108px;
+  height: 120px;
   margin-top: 18px;
   position: relative;
 }
@@ -938,7 +1123,8 @@ textarea.input {
   width: 100%;
   height: 100%;
   display: block;
-  overflow: visible;
+  /* режем по краю: во время прокрутки запасная точка уезжает за границу */
+  overflow: hidden;
 }
 .graph .legend {
   position: absolute;
@@ -1241,6 +1427,7 @@ textarea.input {
 .act-seg {
   display: inline-flex;
   flex-shrink: 0;
+  isolation: isolate;
   padding: 2px;
   background: var(--panel-2);
   border: 1px solid var(--line);
@@ -1387,4 +1574,78 @@ textarea.input {
 .fade-scroll {
   -webkit-mask-image: linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 12px), transparent);
   mask-image: linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+}
+
+/* ─────────────── выбор темы ─────────────── */
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px;
+  border-radius: var(--r);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  text-align: left;
+  transition: border-color 0.16s, background 0.16s, transform 0.16s;
+}
+.theme-card:hover {
+  background: var(--panel-2);
+  transform: translateY(-1px);
+}
+.theme-card.active {
+  border-color: color-mix(in oklab, var(--accent-1) 60%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent-1) 35%, transparent);
+}
+.theme-card .name {
+  font-size: 13px;
+  font-weight: 550;
+  margin-top: 5px;
+}
+.theme-card .hint {
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.theme-preview {
+  position: relative;
+  display: block;
+  height: 74px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-2);
+  overflow: hidden;
+}
+
+/* подсказка на графике */
+.graph .tip {
+  position: absolute;
+  top: 18px;
+  pointer-events: none;
+  z-index: 3;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-2);
+  background: color-mix(in oklab, var(--bg) 82%, transparent);
+  backdrop-filter: blur(14px);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  white-space: nowrap;
+  animation: tip-in 0.12s ease;
+}
+.graph .tip i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+@keyframes tip-in {
+  from {
+    opacity: 0;
+    transform: var(--tip-t, translateX(-50%)) translateY(-3px);
+  }
 }
