@@ -187,6 +187,10 @@ async function main(): Promise<void> {
   const errLogs = logs.filter((l) => /FATAL|PANIC|panic:/i.test(l))
   ok('в журнале нет фатальных ошибок', errLogs.length === 0, errLogs[0] ?? '')
 
+  if (fail > 0) {
+    console.log('\n── последние строки журнала ядра ──')
+    console.log(logs.slice(-25).map((l) => `  ${l}`).join('\n'))
+  }
   console.log(`\n${fail === 0 ? '✅' : '❌'} итог: ${pass} ок, ${fail} провалено`)
   console.log(`   конфиг: ${paths.runtimeConfig}`)
   process.exit(fail === 0 ? 0 : 1)

@@ -25,7 +25,22 @@ jobs:
       - name: Генератор конфигов против настоящего sing-box
         run: node scripts/run-validate.mjs
       - name: Сквозной прогон трафика через ядро
-        run: node scripts/run-e2e.mjs
+        run: |
+          set +e
+          node scripts/run-e2e.mjs 2>&1 | tee /tmp/e2e.log
+          code=${PIPESTATUS[0]}
+          {
+            echo '### Сквозной тест'
+            echo '```'
+            cat /tmp/e2e.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ $code -ne 0 ]; then
+            # Логи прогона недоступны без токена — выносим суть в аннотацию
+            msg=$(grep -E '❌|Error|error' /tmp/e2e.log | head -12 | sed ':a;N;$!ba;s/\n/ § /g')
+            echo "::error title=Сквозной тест упал::${msg}"
+          fi
+          exit $code
 
   windows:
     name: Сборка под Windows
