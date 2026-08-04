@@ -171,7 +171,9 @@ async function main(): Promise<void> {
 
   console.log('\n▸ Замер задержки')
   const ms = await core.measure(node.id)
-  ok('задержка получена', ms > 0 || ms === -1, `${ms} мс`)
+  // Сервер локальный: TCP-рукопожатие укладывается в доли миллисекунды и даёт 0.
+  // Провал — это -1, то есть «не достучались».
+  ok('задержка получена', ms >= 0, `${ms} мс`)
 
   console.log('\n▸ Остановка')
   await core.stop()

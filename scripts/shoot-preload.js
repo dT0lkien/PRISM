@@ -7,6 +7,13 @@ const on = (name) => (cb) => {
 }
 const fire = (name, v) => (cbs[name] ?? []).forEach((cb) => cb(v))
 
+const updateState = {
+  status: 'available',
+  version: '1.2.0',
+  checkedAt: Date.now() - 90_000,
+  notes: 'Ускорено переключение серверов на лету.\nИсправлен разрыв UDP при смене сети.\nДобавлен экспорт правил маршрутизации.'
+}
+
 const node = (id, name, type, server, port, latency, sub) => ({
   id,
   name,
@@ -226,6 +233,13 @@ window.prism = {
     clipboardRead: async () => '',
     clipboardWrite: async () => {}
   },
+  update: {
+    state: async () => updateState,
+    check: async () => updateState,
+    download: async () => updateState,
+    install: async () => true
+  },
+
   window: {
     minimize: async () => {},
     maximize: async () => {},
@@ -240,7 +254,8 @@ window.prism = {
     onSnapshot: on('snapshot'),
     onLatency: on('latency'),
     onToast: on('toast'),
-    onMaximize: on('maximize')
+    onMaximize: on('maximize'),
+    onUpdate: on('update')
   }
 }
 
@@ -257,6 +272,7 @@ window.addEventListener('DOMContentLoaded', () => {
       fire('traffic', { up: Math.round(u), down: Math.round(d), t: Date.now() - (60 - i) * 1000, totalUp: up, totalDown: down })
     }
     fire('connections', connections)
+    fire('update', updateState)
     LOGS.forEach(([level, message], i) =>
       fire('log', { id: i + 1, level, message, t: Date.now() - (LOGS.length - i) * 4200, source: 'core' })
     )

@@ -6,10 +6,16 @@ directories:
   buildResources: build
   output: dist
 
+# Нужен, чтобы electron-builder положил рядом latest.yml и app-update.yml —
+# без них автообновление не работает
+publish:
+  provider: github
+  owner: dT0lkien
+  repo: prism-vpn
+
 files:
   - out/**/*
   - package.json
-  - '!node_modules/**/*'
 
 extraResources:
   - from: resources/core/win

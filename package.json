@@ -1,6 +1,6 @@
 {
   "name": "prism-vpn",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Prism — гибкий VPN-клиент с TUN, системным прокси и маршрутизацией по приложениям",
   "main": "./out/main/index.js",
   "author": "Prism",
@@ -35,5 +35,8 @@
     "ws": "^8.18.0",
     "yaml": "^2.6.0",
     "zustand": "^5.0.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

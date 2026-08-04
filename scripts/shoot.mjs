@@ -22,11 +22,17 @@ app.whenReady().then(async () => {
     backgroundColor: '#070a11',
     webPreferences: {
       preload: join(ROOT, 'scripts/shoot-preload.js'),
+      // без этого Chromium душит rAF в скрытом окне и анимации не доигрывают
+      backgroundThrottling: false,
       contextIsolation: false,
       nodeIntegration: false,
       sandbox: false
     }
   })
+
+  // В скрытом окне Chromium душит requestAnimationFrame и анимации входа
+  // не доигрывают — принудительно ставим конечное состояние
+  const settle = `document.querySelectorAll('.main > div').forEach(el => { el.style.opacity='1'; el.style.transform='none' }); true`
 
   await win.loadFile(join(ROOT, 'out/renderer/index.html'))
   await wait(1400)
@@ -35,7 +41,9 @@ app.whenReady().then(async () => {
     await win.webContents.executeJavaScript(
       `document.querySelectorAll('.nav-item')[${i}]?.click(); true`
     )
-    await wait(1500)
+    await wait(700)
+    await win.webContents.executeJavaScript(settle)
+    await wait(250)
     const img = await win.webContents.capturePage()
     const file = join(OUT, `${i + 1}-${PAGES[i]}.png`)
     writeFileSync(file, img.toPNG())
@@ -45,7 +53,9 @@ app.whenReady().then(async () => {
   // Светлая тема — отдельным кадром
   await win.webContents.executeJavaScript(`document.documentElement.dataset.theme='light'; true`)
   await win.webContents.executeJavaScript(`document.querySelectorAll('.nav-item')[0]?.click(); true`)
-  await wait(1400)
+  await wait(700)
+  await win.webContents.executeJavaScript(settle)
+  await wait(250)
   writeFileSync(join(OUT, '8-dashboard-light.png'), (await win.webContents.capturePage()).toPNG())
   console.log('✓ светлая тема')
 

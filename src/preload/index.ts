@@ -10,8 +10,7 @@ import type {
   ServerNode,
   Settings,
   Subscription,
-  TrafficSample
-} from '@shared/types'
+  TrafficSample, UpdateState } from '@shared/types'
 
 export interface Snapshot {
   settings: Settings
@@ -105,6 +104,13 @@ const api = {
     clipboardWrite: (text: string) => invoke<void>('system:clipboardWrite', text)
   },
 
+  update: {
+    state: () => invoke<UpdateState>('update:state'),
+    check: () => invoke<UpdateState>('update:check'),
+    download: () => invoke<UpdateState>('update:download'),
+    install: () => invoke<boolean>('update:install')
+  },
+
   window: {
     minimize: () => invoke<void>('window:minimize'),
     maximize: () => invoke<void>('window:maximize'),
@@ -122,7 +128,8 @@ const api = {
     onLatency: (cb: (v: { id: string; ms: number }) => void) => on<{ id: string; ms: number }>('evt:latency', cb),
     onToast: (cb: (t: { kind: 'ok' | 'warn' | 'error'; text: string }) => void) =>
       on<{ kind: 'ok' | 'warn' | 'error'; text: string }>('evt:toast', cb),
-    onMaximize: (cb: (v: boolean) => void) => on<boolean>('evt:maximize', cb)
+    onMaximize: (cb: (v: boolean) => void) => on<boolean>('evt:maximize', cb),
+    onUpdate: (cb: (u: UpdateState) => void) => on<UpdateState>('evt:update', cb)
   }
 }
 

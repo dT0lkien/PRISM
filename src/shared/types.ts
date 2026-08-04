@@ -142,6 +142,8 @@ export interface Settings {
 
   /** Поведение приложения */
   autoStart: boolean
+  /** Проверять обновления в фоне */
+  autoUpdate: boolean
   autoConnect: boolean
   startElevated: boolean
   minimizeToTray: boolean
@@ -157,6 +159,31 @@ export interface Settings {
   extraConfig: string
   /** Полностью ручной конфиг вместо генератора */
   manualConfig: boolean
+}
+
+export type UpdateStatus =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'ready'
+  | 'error'
+  /** Портативная сборка и режим разработки обновлять себя не умеют */
+  | 'unsupported'
+
+export interface UpdateState {
+  status: UpdateStatus
+  /** Версия, которую предлагают поставить */
+  version?: string
+  notes?: string
+  releasedAt?: string
+  /** 0..100 */
+  percent?: number
+  bytesPerSecond?: number
+  transferred?: number
+  total?: number
+  error?: string
+  checkedAt?: number
 }
 
 export type ThemeName = 'dark' | 'light' | 'aero'

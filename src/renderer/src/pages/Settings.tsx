@@ -1,17 +1,21 @@
 import { useState } from 'react'
 import {
+  AlertTriangle,
   Braces,
   CheckCircle2,
   Download,
+  ExternalLink,
   FolderOpen,
   Info,
+  PackageCheck,
+  RefreshCw,
   RotateCcw,
   ShieldAlert,
   Unplug
 } from 'lucide-react'
 import { DNS_PRESETS_LOCAL, DNS_PRESETS_REMOTE } from '@shared/defaults'
 import type { AccentName, DnsStrategy, ThemeName, TunStack } from '@shared/types'
-import { ACCENTS, useStore } from '../store'
+import { ACCENTS, bytes, speed, useStore } from '../store'
 import { Modal, Setting, Switch } from '../ui'
 import logo from '../assets/logo.png'
 
@@ -57,6 +61,139 @@ function ThemePreview({ id }: { id: ThemeName }): JSX.Element {
       />
     </span>
   )
+}
+
+const RELEASES_URL = 'https://github.com/dT0lkien/prism-vpn/releases/latest'
+
+/** Блок состояния обновления: у каждого статуса своё действие */
+function UpdateSection(): JSX.Element {
+  const { update, info, toast } = useStore()
+  const [busy, setBusy] = useState(false)
+
+  const run = async (fn: () => Promise<unknown>): Promise<void> => {
+    setBusy(true)
+    try {
+      await fn()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const checked = update.checkedAt
+    ? `проверено в ${new Date(update.checkedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}`
+    : 'ещё не проверялось'
+
+  return (
+    <div className="setting stack" style={{ gap: 12 }}>
+      <div className="row" style={{ gap: 12 }}>
+        <span className={`upd-badge ${update.status}`}>
+          {update.status === 'ready' ? (
+            <PackageCheck size={18} />
+          ) : update.status === 'available' ? (
+            <Download size={18} />
+          ) : update.status === 'error' ? (
+            <AlertTriangle size={18} />
+          ) : update.status === 'unsupported' ? (
+            <Info size={18} />
+          ) : (
+            <RefreshCw size={18} className={update.status === 'checking' ? 'spin' : ''} />
+          )}
+        </span>
+
+        <div className="grow col" style={{ gap: 2, minWidth: 0 }}>
+          <b style={{ fontSize: 13.5 }}>
+            {update.status === 'checking'
+              ? 'Проверяю обновления…'
+              : update.status === 'available'
+                ? `Доступна версия ${update.version}`
+                : update.status === 'downloading'
+                  ? `Загружаю версию ${update.version}`
+                  : update.status === 'ready'
+                    ? `Версия ${update.version} готова к установке`
+                    : update.status === 'error'
+                      ? 'Не удалось проверить обновления'
+                      : update.status === 'unsupported'
+                        ? 'Автообновление недоступно'
+                        : `У вас последняя версия — ${info?.appVersion}`}
+          </b>
+          <span className="dim" style={{ fontSize: 12 }}>
+            {update.status === 'error' || update.status === 'unsupported'
+              ? update.error
+              : update.status === 'downloading'
+                ? `${bytes(update.transferred ?? 0)} из ${bytes(update.total ?? 0)} · ${speed(update.bytesPerSecond ?? 0)}`
+                : update.status === 'ready'
+                  ? 'Prism отключит туннель, поставит обновление и запустится заново'
+                  : checked}
+          </span>
+        </div>
+
+        {update.status === 'available' && (
+          <button className="btn primary" disabled={busy} onClick={() => run(() => window.prism.update.download())}>
+            <Download size={15} />
+            Скачать
+          </button>
+        )}
+        {update.status === 'ready' && (
+          <button className="btn primary" disabled={busy} onClick={() => run(() => window.prism.update.install())}>
+            <PackageCheck size={15} />
+            Установить
+          </button>
+        )}
+        {update.status === 'unsupported' && (
+          <button className="btn" onClick={() => window.prism.system.openExternal(RELEASES_URL)}>
+            <ExternalLink size={15} />
+            Открыть релизы
+          </button>
+        )}
+        {(update.status === 'idle' || update.status === 'error') && (
+          <button
+            className="btn"
+            disabled={busy}
+            onClick={() =>
+              run(async () => {
+                const r = await window.prism.update.check()
+                if (r.status === 'idle') toast('ok', 'Установлена последняя версия')
+              })
+            }
+          >
+            <RefreshCw size={15} className={busy ? 'spin' : ''} />
+            Проверить
+          </button>
+        )}
+      </div>
+
+      {update.status === 'downloading' && (
+        <div style={{ height: 5, background: 'var(--panel-3)', borderRadius: 99, overflow: 'hidden' }}>
+          <div
+            style={{
+              width: `${update.percent ?? 0}%`,
+              height: '100%',
+              background: 'linear-gradient(90deg, var(--accent-1), var(--accent-2))',
+              transition: 'width .3s ease'
+            }}
+          />
+        </div>
+      )}
+
+      {update.status === 'available' && update.notes && (
+        <div className="upd-notes">{stripHtml(update.notes).slice(0, 600)}</div>
+      )}
+    </div>
+  )
+}
+
+/** Описание релиза приходит разметкой — показываем текстом */
+function stripHtml(s: string): string {
+  return s
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|li|h\d)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 export default function SettingsPage(): JSX.Element {
@@ -432,6 +569,18 @@ export default function SettingsPage(): JSX.Element {
             <RotateCcw size={14} />
             Сбросить
           </button>
+        </Setting>
+      </div>
+
+      {/* ─── Обновления ─── */}
+      <div className="section-title">Обновления</div>
+      <div className="card pad">
+        <UpdateSection />
+        <Setting
+          title="Проверять автоматически"
+          hint="Раз в шесть часов Prism смотрит, не вышла ли новая версия. Ничего не скачивается без вашего согласия."
+        >
+          <Switch on={s.autoUpdate} onChange={(v) => patchSettings({ autoUpdate: v })} />
         </Setting>
       </div>
 

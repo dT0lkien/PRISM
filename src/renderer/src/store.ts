@@ -6,8 +6,7 @@ import type {
   LogEntry,
   RoutingRule,
   Settings,
-  TrafficSample
-} from '@shared/types'
+  TrafficSample, UpdateState } from '@shared/types'
 import type { BootstrapInfo, Snapshot } from '../../preload'
 import { DEFAULT_SETTINGS } from '@shared/defaults'
 
@@ -37,6 +36,7 @@ interface State {
   busy: boolean
   maximized: boolean
   logPaused: boolean
+  update: UpdateState
 
   init: () => Promise<void>
   setPage: (p: Page) => void
@@ -83,6 +83,7 @@ export const useStore = create<State>((set, get) => ({
   busy: false,
   maximized: false,
   logPaused: false,
+  update: { status: 'idle' },
 
   async init() {
     const api = window.prism
@@ -123,6 +124,8 @@ export const useStore = create<State>((set, get) => ({
     })
 
     api.events.onToast((t) => get().toast(t.kind, t.text))
+    api.events.onUpdate((u) => set({ update: u }))
+    void api.update.state().then((u) => set({ update: u }))
   },
 
   setPage: (page) => set({ page }),

@@ -9,6 +9,7 @@ import { DEFAULT_ENABLED_PRESETS, DEFAULT_SETTINGS } from '@shared/defaults'
 import { uid } from '@shared/parsers'
 import { store, paths } from './store'
 import { core } from './core'
+import { updater } from './updater'
 import { fetchSubscription, importManual, mergeSubscriptionNodes } from './subs'
 import {
   clearSystemProxy,
@@ -86,6 +87,11 @@ export function wireCoreEvents(): void {
   core.clash.on('log', (l: { level: string; message: string }) => {
     send('evt:log', { id: ++logSeq, level: l.level, message: l.message, t: Date.now(), source: 'core' })
   })
+
+  updater.on('state', (u) => send('evt:update', u))
+  updater.on('log', (l: { level: string; message: string }) => {
+    send('evt:log', { id: ++logSeq, level: l.level, message: l.message, t: Date.now(), source: 'app' })
+  })
 }
 
 /* ─────────────────────── регистрация обработчиков ─────────────────────── */
@@ -128,6 +134,12 @@ export function registerIpc(): void {
   h('core:closeConnection', (id: string) => core.clash.closeConnection(id))
   h('core:closeAllConnections', () => core.clash.closeAllConnections())
 
+  /* — обновления — */
+  h('update:state', () => updater.getState())
+  h('update:check', () => updater.check())
+  h('update:download', () => updater.download())
+  h('update:install', () => updater.install())
+
   /* — настройки — */
   h('settings:update', async (patch: Partial<Settings>) => {
     const before = store.get().settings
@@ -152,6 +164,7 @@ export function registerIpc(): void {
     if (restartKeys.some((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))) {
       await core.applyIfRunning()
     }
+    if (before.autoUpdate !== after.autoUpdate) updater.reschedule()
     if (before.autoStart !== after.autoStart || before.startElevated !== after.startElevated) {
       await setAutoStart(after.autoStart, after.startElevated, after.startMinimized).catch((e) =>
         toast('warn', String(e.message ?? e))

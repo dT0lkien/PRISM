@@ -14,6 +14,7 @@ import {
   Waypoints,
   X,
   AlertTriangle,
+  ArrowUpCircle,
   Info
 } from 'lucide-react'
 import { useStore, type Page } from './store'
@@ -156,6 +157,8 @@ export default function App(): JSX.Element {
             )
           })}
 
+          <UpdateChip />
+
           <div className="foot">
             <span>Prism {useStore.getState().info?.appVersion}</span>
             <span>ядро sing-box {useStore.getState().info?.coreVersion}</span>
@@ -202,6 +205,20 @@ export default function App(): JSX.Element {
         </AnimatePresence>
       </div>
     </div>
+  )
+}
+
+/** Когда обновление скачано — заметная кнопка внизу меню */
+function UpdateChip(): JSX.Element | null {
+  const update = useStore((s) => s.update)
+  const setPage = useStore((s) => s.setPage)
+  if (update.status !== 'ready' && update.status !== 'available') return null
+  const ready = update.status === 'ready'
+  return (
+    <button className="upd-dot" onClick={() => setPage('settings')} title="Открыть настройки обновления">
+      <ArrowUpCircle size={14} />
+      {ready ? `Обновление ${update.version} готово` : `Доступна ${update.version}`}
+    </button>
   )
 }
 

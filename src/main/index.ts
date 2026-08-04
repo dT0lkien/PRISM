@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { store, paths } from './store'
 import { core } from './core'
+import { updater } from './updater'
 import { registerIpc, setMainWindow, snapshot, wireCoreEvents } from './ipc'
 import { clearSystemProxy, isElevated, killStrayCores, IS_WIN } from './win'
 import { fetchSubscription, mergeSubscriptionNodes } from './subs'
@@ -222,6 +223,10 @@ app.whenReady().then(async () => {
   createWindow()
   createTray()
   scheduleSubscriptionUpdates()
+
+  // Перед установкой обновления гасим туннель и возвращаем системный прокси
+  updater.onBeforeInstall = cleanup
+  updater.init()
 
   const st = store.get().settings
   if (st.autoConnect) {

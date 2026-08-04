@@ -8,7 +8,12 @@ export default defineConfig({
   main: {
     build: {
       outDir: 'out/main',
-      rollupOptions: { input: resolve('src/main/index.ts') }
+      rollupOptions: {
+        input: resolve('src/main/index.ts'),
+        // electron-updater грузит app-update.yml и части себя динамически —
+        // в бандле это ломается, поэтому оставляем обычным модулем
+        external: ['electron-updater']
+      }
     },
     resolve: { alias: { '@shared': shared } }
   },
