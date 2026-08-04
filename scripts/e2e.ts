@@ -153,9 +153,15 @@ async function main(): Promise<void> {
     }
   }
 
-  // Гоняем ещё немного трафика, чтобы счётчики успели что-то намерить
-  for (let i = 0; i < 8; i++) await viaProxy('http://example.com/', LOCAL_PORT).catch(() => null)
-  await wait(4000)
+  // Трафик гоняем ВНУТРИ окна наблюдения, а не до него: на быстрой машине
+  // короткий всплеск успевает пройти раньше, чем подключится веб-сокет
+  // статистики, и все замеры приходят нулевыми.
+  const until = Date.now() + 6000
+  while (Date.now() < until) {
+    await viaProxy('http://example.com/', LOCAL_PORT).catch(() => null)
+    await wait(350)
+  }
+  await wait(1500)
 
   ok('события трафика приходят', traffic.length >= 2, `${traffic.length} замеров`)
   ok(
