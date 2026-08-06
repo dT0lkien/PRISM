@@ -484,8 +484,7 @@ export default function SettingsPage(): JSX.Element {
             onChange={(v) => patchSettings({ graphStyle: v })}
             options={[
               { value: 'mirror', label: 'Зеркало' },
-              { value: 'area', label: 'Волна' },
-              { value: 'bars', label: 'Столбики' }
+              { value: 'area', label: 'Волна' }
             ]}
           />
         </Setting>

@@ -191,7 +191,7 @@ export interface UpdateState {
 
 export type ThemeName = 'dark' | 'light' | 'aero' | 'glass' | 'win95'
 /** Как рисовать график трафика */
-export type GraphStyle = 'mirror' | 'area' | 'bars'
+export type GraphStyle = 'mirror' | 'area'
 export type AccentName = 'aurora' | 'violet' | 'ember' | 'ocean' | 'rose' | 'lime'
 
 /* ─────────────────────────── Рантайм ─────────────────────────── */

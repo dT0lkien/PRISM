@@ -359,12 +359,9 @@ function TrafficGraph({ style }: { style: GraphStyle }): JSX.Element {
 
   const rawDown = useMemo(() => Math.max(64 * 1024, ...pts.map((p) => p.down)), [pts])
   const rawUp = useMemo(() => Math.max(16 * 1024, ...pts.map((p) => p.up)), [pts])
-  const rawSum = useMemo(() => Math.max(64 * 1024, ...pts.map((p) => p.down + p.up)), [pts])
-
   const dMax = useEased(rawDown)
   const uMax = useEased(rawUp)
   const bMax = useEased(Math.max(rawDown, rawUp))
-  const sMax = useEased(rawSum)
 
   /* Горизонтальное скольжение: новый замер появляется справа, полотно уезжает
      влево ровно на шаг за секунду. Под курсором замораживаем, иначе подсказка убегает. */
@@ -422,7 +419,6 @@ function TrafficGraph({ style }: { style: GraphStyle }): JSX.Element {
   const hp = hover !== null ? pts[hover] : null
   const hx = hover !== null ? x(hover) : 0
   const tipSide = hx > GW * 0.72 ? 'right' : hx < GW * 0.28 ? 'left' : 'mid'
-  const barW = STEP * 0.66
 
   return (
     <div className="graph" ref={boxRef} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
@@ -444,7 +440,7 @@ function TrafficGraph({ style }: { style: GraphStyle }): JSX.Element {
           <span className="scale bottom">{speed(uMax)}</span>
         </>
       ) : (
-        <span className="scale top">{speed(style === 'bars' ? sMax : bMax)}</span>
+        <span className="scale top">{speed(bMax)}</span>
       )}
 
       <svg viewBox={`0 0 ${GW} ${GH}`} preserveAspectRatio="none">
@@ -457,10 +453,6 @@ function TrafficGraph({ style }: { style: GraphStyle }): JSX.Element {
             <stop offset="0%" stopColor="var(--accent-2)" stopOpacity="0.42" />
             <stop offset="100%" stopColor="var(--accent-2)" stopOpacity="0.02" />
           </linearGradient>
-          <linearGradient id="g-bar-d" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--accent-1)" stopOpacity="0.95" />
-            <stop offset="100%" stopColor="var(--accent-1)" stopOpacity="0.35" />
-          </linearGradient>
         </defs>
 
         {style === 'mirror' ? (
@@ -472,55 +464,20 @@ function TrafficGraph({ style }: { style: GraphStyle }): JSX.Element {
         )}
 
         <g ref={slideRef}>
-          {style === 'bars' ? (
-            pts.map((p, i) => {
-              const total = p.down + p.up
-              const hAll = (total / sMax) * (GH - PAD * 2)
-              const hUp = total > 0 ? hAll * (p.up / total) : 0
-              return (
-                <g key={p.t}>
-                  <rect
-                    x={x(i) - barW / 2}
-                    y={GH - hAll}
-                    width={barW}
-                    height={Math.max(0, hAll - hUp)}
-                    rx={1.5}
-                    fill="url(#g-bar-d)"
-                  />
-                  <rect
-                    x={x(i) - barW / 2}
-                    y={GH - hUp}
-                    width={barW}
-                    height={Math.max(0, hUp)}
-                    rx={1.5}
-                    fill="var(--accent-2)"
-                    opacity="0.85"
-                  />
-                </g>
-              )
-            })
-          ) : (
-            <>
-              {geom.uArea && <path d={geom.uArea} fill="url(#g-up)" />}
-              {geom.dArea && <path d={geom.dArea} fill="url(#g-down)" />}
-              {geom.uLine && (
-                <path d={geom.uLine} fill="none" stroke="var(--accent-2)" strokeWidth="1.7" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-              )}
-              {geom.dLine && (
-                <path d={geom.dLine} fill="none" stroke="var(--accent-1)" strokeWidth="2.1" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-              )}
-            </>
+          {geom.uArea && <path d={geom.uArea} fill="url(#g-up)" />}
+          {geom.dArea && <path d={geom.dArea} fill="url(#g-down)" />}
+          {geom.uLine && (
+            <path d={geom.uLine} fill="none" stroke="var(--accent-2)" strokeWidth="1.7" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          )}
+          {geom.dLine && (
+            <path d={geom.dLine} fill="none" stroke="var(--accent-1)" strokeWidth="2.1" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           )}
 
           {hp && (
             <>
               <line x1={hx} y1="0" x2={hx} y2={GH} stroke="var(--line-2)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-              {style !== 'bars' && (
-                <>
-                  <circle cx={hx} cy={geom.yD(hp.down)} r="3.5" fill="var(--accent-1)" stroke="var(--bg)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
-                  <circle cx={hx} cy={geom.yU(hp.up)} r="3" fill="var(--accent-2)" stroke="var(--bg)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
-                </>
-              )}
+              <circle cx={hx} cy={geom.yD(hp.down)} r="3.5" fill="var(--accent-1)" stroke="var(--bg)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+              <circle cx={hx} cy={geom.yU(hp.up)} r="3" fill="var(--accent-2)" stroke="var(--bg)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
             </>
           )}
         </g>

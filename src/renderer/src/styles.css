@@ -1742,7 +1742,8 @@ textarea.input {
   --muted: #ccd5e8;
   --dim: #a7b3cc;
   /* Плёнка тоньше обычной: стеклу нужен цвет под собой, иначе размывать нечего */
-  --scrim: linear-gradient(170deg, rgba(8, 12, 24, 0.3), rgba(8, 12, 24, 0.58) 60%, rgba(8, 12, 24, 0.7));
+  /* Плёнка тонкая: стеклу нужен яркий фон под собой, иначе размывать нечего */
+  --scrim: linear-gradient(170deg, rgba(8, 12, 24, 0.16), rgba(8, 12, 24, 0.4) 60%, rgba(8, 12, 24, 0.52));
 
   --r-sm: 11px;
   --r: 17px;
@@ -1752,15 +1753,41 @@ textarea.input {
   --shadow: 0 10px 34px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.55);
 
-  --glass: blur(30px) saturate(180%);
+  --glass: blur(26px) saturate(200%);
   /* Блик сверху и лёгкая тень снизу — то, что делает стекло объёмным */
   --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.42), inset 0 -1px 0 rgba(255, 255, 255, 0.08),
     inset 0 0 22px rgba(255, 255, 255, 0.05);
 }
 
+/* Свечение по умолчанию идёт с filter: blur(110px). Размывать пред-размытое
+   бессмысленно — backdrop-filter просто нечего делать, и стекло выглядит
+   как обычная заливка. Поэтому здесь фон РЕЗКИЙ, да ещё и с мелкой сеткой:
+   именно на ней видно, что панель размывает то, что под ней. */
 [data-theme='glass'] .aurora {
-  opacity: 0.95;
-  filter: blur(90px);
+  opacity: 1;
+  filter: none;
+}
+[data-theme='glass'] .aurora span {
+  mix-blend-mode: normal;
+  opacity: 0.8;
+}
+[data-theme='glass'] .aurora .a1 {
+  background: radial-gradient(circle, #2563eb 0 56%, rgba(37, 99, 235, 0) 59%);
+}
+[data-theme='glass'] .aurora .a2 {
+  background: radial-gradient(circle, #7c3aed 0 54%, rgba(124, 58, 237, 0) 57%);
+}
+[data-theme='glass'] .aurora .a3 {
+  background: radial-gradient(circle, #06b6d4 0 52%, rgba(6, 182, 212, 0) 55%);
+}
+/* Высокочастотная сетка — то, что делает размытие очевидным */
+[data-theme='glass'] .aurora::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(58deg, rgba(255, 255, 255, 0.075) 0 1.5px, transparent 1.5px 16px),
+    repeating-linear-gradient(-58deg, rgba(255, 255, 255, 0.05) 0 1.5px, transparent 1.5px 24px);
 }
 
 [data-theme='glass'] .card,
@@ -1770,14 +1797,42 @@ textarea.input {
 [data-theme='glass'] .rule,
 [data-theme='glass'] .preset,
 [data-theme='glass'] .theme-card {
-  background: rgba(255, 255, 255, 0.08);
+  position: relative;
+  background: rgba(255, 255, 255, 0.06);
   backdrop-filter: var(--glass);
   -webkit-backdrop-filter: var(--glass);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow: var(--glass-edge), 0 8px 30px rgba(0, 0, 0, 0.3);
+  border: none;
+  box-shadow: var(--glass-edge), 0 10px 34px rgba(0, 0, 0, 0.28);
 }
 [data-theme='glass'] .card.hero {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Световая кромка: градиентная рамка толщиной в пиксель, ярче там,
+   откуда «падает свет». Это и читается как край стекла. */
+[data-theme='glass'] .card::before,
+[data-theme='glass'] .modal::before,
+[data-theme='glass'] .app-row::before,
+[data-theme='glass'] .node::before,
+[data-theme='glass'] .rule::before,
+[data-theme='glass'] .preset::before,
+[data-theme='glass'] .theme-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.9),
+    rgba(255, 255, 255, 0.07) 36%,
+    rgba(255, 255, 255, 0.04) 64%,
+    rgba(255, 255, 255, 0.6)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
 }
 
 [data-theme='glass'] .titlebar,
@@ -2077,4 +2132,59 @@ textarea.input {
 [data-theme='win95'] .graph .legend,
 [data-theme='win95'] .graph .scale {
   color: #1c1c1c;
+}
+
+/* Кнопка подключения в духе Windows 95: прямоугольная, с фаской и подписью,
+   в подключённом состоянии выглядит вдавленной */
+[data-theme='win95'] .power {
+  width: auto;
+  height: auto;
+  padding: 10px 0 4px;
+}
+[data-theme='win95'] .power .ring,
+[data-theme='win95'] .power .sweep {
+  display: none;
+}
+[data-theme='win95'] .power button {
+  width: 210px;
+  height: 62px;
+  border-radius: 0;
+  border: none;
+  background: #c0c0c0;
+  box-shadow: var(--raise);
+  color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  font-size: 15px;
+  font-weight: 700;
+  transition: none;
+}
+[data-theme='win95'] .power button svg {
+  width: 26px;
+  height: 26px;
+}
+[data-theme='win95'] .power button::after {
+  content: 'Подключить';
+}
+[data-theme='win95'] .power.on button::after {
+  content: 'Отключить';
+}
+[data-theme='win95'] .power.busy button::after {
+  content: 'Подождите…';
+}
+[data-theme='win95'] .power button:hover {
+  background: #c0c0c0;
+  color: #000;
+}
+[data-theme='win95'] .power.on button,
+[data-theme='win95'] .power button:active {
+  box-shadow: var(--sink);
+  background: #b9b9b9;
+}
+/* Пунктирная рамка фокуса — деталь, без которой кнопка не та */
+[data-theme='win95'] .power.on button {
+  outline: 1px dotted #000;
+  outline-offset: -5px;
 }
