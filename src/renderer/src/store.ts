@@ -221,7 +221,7 @@ const ACCENTS: Record<string, [string, string]> = {
 export function applyTheme(s: Settings): void {
   const root = document.documentElement
   root.dataset.theme = s.theme
-  const [a1, a2] = ACCENTS[s.accent] ?? ACCENTS.aurora
+  const [a1, a2] = s.accentCustom ? [s.accentCustom.a, s.accentCustom.b] : (ACCENTS[s.accent] ?? ACCENTS.aurora)
   root.style.setProperty('--accent-1', a1)
   root.style.setProperty('--accent-2', a2)
 }

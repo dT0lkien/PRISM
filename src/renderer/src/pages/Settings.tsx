@@ -23,7 +23,8 @@ const THEMES: { id: ThemeName; label: string; hint: string }[] = [
   { id: 'dark', label: 'Тёмная', hint: 'По умолчанию' },
   { id: 'light', label: 'Светлая', hint: 'Для яркого света' },
   { id: 'aero', label: 'Aero', hint: 'В духе XP и Vista' },
-  { id: 'glass', label: 'Liquid Glass', hint: 'Матовое стекло' }
+  { id: 'glass', label: 'Liquid Glass', hint: 'Матовое стекло' },
+  { id: 'win95', label: 'Windows 95', hint: 'Серый пластик и бирюза' }
 ]
 
 /** Маленький макет окна — понятнее, чем название темы в списке */
@@ -35,7 +36,9 @@ function ThemePreview({ id }: { id: ThemeName }): JSX.Element {
         ? { bg: 'linear-gradient(160deg,#f7f9fc,#e8ecf4)', bar: 'rgba(15,23,42,.06)', card: '#fff', line: 'rgba(15,23,42,.14)', radius: 4 }
         : id === 'aero'
           ? { bg: 'linear-gradient(170deg,#a9cff0,#4f86c6)', bar: 'rgba(255,255,255,.65)', card: 'rgba(255,255,255,.8)', line: 'rgba(11,42,92,.3)', radius: 2 }
-          : { bg: 'radial-gradient(120% 100% at 15% 0%, #3b82f6 0%, #7c3aed 55%, #0a0f1c 100%)', bar: 'rgba(255,255,255,.14)', card: 'rgba(255,255,255,.16)', line: 'rgba(255,255,255,.3)', radius: 7 }
+          : id === 'glass'
+            ? { bg: 'radial-gradient(120% 100% at 15% 0%, #3b82f6 0%, #7c3aed 55%, #0a0f1c 100%)', bar: 'rgba(255,255,255,.14)', card: 'rgba(255,255,255,.16)', line: 'rgba(255,255,255,.3)', radius: 7 }
+            : { bg: '#008080', bar: 'linear-gradient(90deg,#000080,#1084d0)', card: '#c0c0c0', line: '#808080', radius: 0 }
 
   const glossy = id === 'aero'
   return (
@@ -63,6 +66,23 @@ function ThemePreview({ id }: { id: ThemeName }): JSX.Element {
         }}
       />
     </span>
+  )
+}
+
+function ColorPick({
+  label,
+  value,
+  onChange
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+}): JSX.Element {
+  return (
+    <label className="color-pick" title={`${label}: ${value}`}>
+      <input type="color" value={value} onChange={(e) => onChange(e.target.value)} />
+      {label}
+    </label>
   )
 }
 
@@ -206,6 +226,10 @@ export default function SettingsPage(): JSX.Element {
   const [cfg, setCfg] = useState('')
   const [extra, setExtra] = useState(s.extraConfig)
   const [check, setCheck] = useState<{ ok: boolean; error?: string } | null>(null)
+  /** Цвета, которые сейчас реально применены */
+  const pair: [string, string] = s.accentCustom
+    ? [s.accentCustom.a, s.accentCustom.b]
+    : (ACCENTS[s.accent] ?? ACCENTS.aurora)
 
   const showConfig = async (): Promise<void> => {
     setCfg(await window.prism.config.preview())
@@ -466,126 +490,54 @@ export default function SettingsPage(): JSX.Element {
           />
         </Setting>
 
-        <div className="setting">
+        <div className="setting stack" style={{ gap: 12 }}>
           <div className="txt">
             <b>Акцент</b>
-            <span>Цвет кнопок, графиков и подсветки</span>
+            <span>Цвет кнопок, графиков и подсветки. Возьмите готовый набор или подберите свой.</span>
           </div>
-          <div className="ctl row" style={{ gap: 7 }}>
-            {(Object.keys(ACCENTS) as AccentName[]).map((a) => (
-              <button
-                key={a}
-                onClick={() => patchSettings({ accent: a })}
-                title={a}
-                style={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: 8,
-                  background: `linear-gradient(135deg, ${ACCENTS[a][0]}, ${ACCENTS[a][1]})`,
-                  border: s.accent === a ? '2px solid var(--text)' : '2px solid transparent',
-                  outline: s.accent === a ? '1px solid var(--line-2)' : 'none',
-                  transition: 'transform .15s'
-                }}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
 
-      {/* ─── Дополнительно ─── */}
-      <div className="section-title">Дополнительно</div>
-      <div className="card pad">
-        <Setting title="Подробность журнала">
-          <select
-            className="select"
-            value={s.logLevel}
-            onChange={(e) => patchSettings({ logLevel: e.target.value as typeof s.logLevel })}
-          >
-            <option value="trace">trace</option>
-            <option value="debug">debug</option>
-            <option value="info">info</option>
-            <option value="warn">warn</option>
-            <option value="error">error</option>
-          </select>
-        </Setting>
+          <div className="row wrap" style={{ gap: 10 }}>
+            <div className="row" style={{ gap: 7 }}>
+              {(Object.keys(ACCENTS) as AccentName[]).map((a) => {
+                const on = !s.accentCustom && s.accent === a
+                return (
+                  <button
+                    key={a}
+                    onClick={() => patchSettings({ accent: a, accentCustom: undefined })}
+                    title={a}
+                    className="accent-dot"
+                    style={{
+                      background: `linear-gradient(135deg, ${ACCENTS[a][0]}, ${ACCENTS[a][1]})`,
+                      borderColor: on ? 'var(--text)' : 'transparent'
+                    }}
+                  />
+                )
+              })}
+            </div>
 
-        <div className="setting stack" style={{ gap: 10 }}>
-          <div className="txt">
-            <b>Свой JSON поверх конфига</b>
-            <span>
-              Объект сливается с тем, что генерирует Prism, — можно доопределить или переопределить любую секцию
-              sing-box. Массивы заменяются целиком.
-            </span>
-          </div>
-          <textarea
-            className="input"
-            style={{ minHeight: 120 }}
-            placeholder={'{\n  "experimental": {\n    "clash_api": { "external_ui": "" }\n  }\n}'}
-            value={extra}
-            onChange={(e) => {
-              setExtra(e.target.value)
-              setCheck(null)
-            }}
-            spellCheck={false}
-          />
-          <div className="row">
-            {check && (
-              <span className={`chip ${check.ok ? 'ok' : 'err'}`}>
-                {check.ok ? <CheckCircle2 size={12} /> : <ShieldAlert size={12} />}
-                {check.ok ? 'Конфиг проходит проверку' : check.error}
-              </span>
-            )}
             <div className="grow" />
-            <button className="btn" onClick={saveExtra}>
-              Проверить и применить
-            </button>
-          </div>
-        </div>
 
-        <div className="setting">
-          <div className="txt">
-            <b>Инструменты</b>
-            <span>Просмотр итогового конфига, сохранение и обслуживание</span>
+            <div className="row" style={{ gap: 8 }}>
+              <ColorPick
+                label="Основной"
+                value={pair[0]}
+                onChange={(v) => patchSettings({ accentCustom: { a: v, b: pair[1] } })}
+              />
+              <ColorPick
+                label="Второй"
+                value={pair[1]}
+                onChange={(v) => patchSettings({ accentCustom: { a: pair[0], b: v } })}
+              />
+              {s.accentCustom && (
+                <button className="btn sm ghost" onClick={() => patchSettings({ accentCustom: undefined })}>
+                  Сбросить
+                </button>
+              )}
+            </div>
           </div>
-          <div className="ctl row wrap" style={{ gap: 7, justifyContent: 'flex-end' }}>
-            <button className="btn sm" onClick={showConfig}>
-              <Braces size={14} />
-              Показать конфиг
-            </button>
-            <button
-              className="btn sm"
-              onClick={async () => {
-                const p = await window.prism.config.export()
-                if (p) toast('ok', 'Сохранено')
-              }}
-            >
-              <Download size={14} />
-              Экспорт
-            </button>
-            <button className="btn sm" onClick={() => window.prism.system.openDataDir()}>
-              <FolderOpen size={14} />
-              Папка данных
-            </button>
-            <button className="btn sm" onClick={() => window.prism.system.resetSystemProxy()}>
-              <Unplug size={14} />
-              Сбросить системный прокси
-            </button>
-          </div>
-        </div>
 
-        <Setting title="Сбросить все настройки" hint="Серверы и подписки останутся на месте">
-          <button
-            className="btn danger sm"
-            onClick={async () => {
-              useStore.getState().setSnap(await window.prism.settings.reset())
-              setExtra('')
-              toast('ok', 'Настройки сброшены')
-            }}
-          >
-            <RotateCcw size={14} />
-            Сбросить
-          </button>
-        </Setting>
+          <div className="accent-preview" style={{ background: `linear-gradient(90deg, ${pair[0]}, ${pair[1]})` }} />
+        </div>
       </div>
 
       {/* ─── Обновления ─── */}

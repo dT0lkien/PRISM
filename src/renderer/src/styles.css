@@ -495,6 +495,9 @@ textarea {
   font-size: 13.5px;
   font-weight: 500;
   position: relative;
+  /* .glow лежит на z-index:-1 — без своей области наложения он уходит
+     за фон боковой панели, и в непрозрачных темах подсветка пропадает */
+  isolation: isolate;
   transition: color 0.16s, background 0.16s;
   width: 100%;
   text-align: left;
@@ -1839,4 +1842,239 @@ textarea.input {
 }
 [data-theme='glass'] .power {
   filter: drop-shadow(0 10px 26px color-mix(in oklab, var(--accent-1) 28%, transparent));
+}
+
+/* ─────────────── выбор акцента ─────────────── */
+
+.accent-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  outline: 1px solid var(--line-2);
+  transition: transform 0.15s;
+}
+.accent-dot:hover {
+  transform: scale(1.12);
+}
+.color-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px 4px 5px;
+  border-radius: var(--r-sm);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  font-size: 11.5px;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.color-pick:hover {
+  background: var(--panel-2);
+}
+.color-pick input[type='color'] {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+.color-pick input[type='color']::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.color-pick input[type='color']::-webkit-color-swatch {
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+}
+.accent-preview {
+  height: 8px;
+  border-radius: 99px;
+}
+
+/* ═══ Windows 95 — серый пластик, фаски и бирюзовый стол ═══ */
+[data-theme='win95'] {
+  --bg: #008080;
+  --bg-2: #008080;
+  --panel: #c0c0c0;
+  --panel-2: #d4d0c8;
+  --panel-3: #9a9a9a;
+  --line: #808080;
+  --line-2: #000000;
+  --text: #000000;
+  --muted: #1c1c1c;
+  --dim: #454545;
+  --scrim: linear-gradient(0deg, #008080, #008080);
+
+  --ok: #007000;
+  --warn: #7a5c00;
+  --err: #8b0000;
+
+  --r-sm: 0px;
+  --r: 0px;
+  --r-lg: 0px;
+  --r-xl: 0px;
+
+  --shadow: none;
+  --shadow-lg: 3px 3px 0 rgba(0, 0, 0, 0.45);
+
+  --font: 'MS Sans Serif', 'Microsoft Sans Serif', Tahoma, Geneva, Verdana, sans-serif;
+  /* Классическая двойная фаска: светлая сверху-слева, тёмная снизу-справа */
+  --raise: inset 1px 1px 0 #ffffff, inset -1px -1px 0 #000000, inset 2px 2px 0 #dfdfdf,
+    inset -2px -2px 0 #808080;
+  --sink: inset -1px -1px 0 #ffffff, inset 1px 1px 0 #000000, inset -2px -2px 0 #dfdfdf,
+    inset 2px 2px 0 #808080;
+}
+
+[data-theme='win95'] body {
+  font-size: 12px;
+}
+/* Плоский бирюзовый стол вместо свечения */
+[data-theme='win95'] .aurora {
+  display: none;
+}
+
+[data-theme='win95'] .card,
+[data-theme='win95'] .app-row,
+[data-theme='win95'] .node,
+[data-theme='win95'] .rule,
+[data-theme='win95'] .preset,
+[data-theme='win95'] .modal,
+[data-theme='win95'] .theme-card,
+[data-theme='win95'] .upd-badge {
+  background: #c0c0c0;
+  border: none;
+  box-shadow: var(--raise);
+}
+
+[data-theme='win95'] .titlebar {
+  background: linear-gradient(90deg, #000080, #1084d0);
+  border-bottom: none;
+  box-shadow: inset 0 1px 0 #4a4aff;
+  backdrop-filter: none;
+}
+[data-theme='win95'] .titlebar .brand,
+[data-theme='win95'] .tb-status {
+  color: #ffffff;
+}
+[data-theme='win95'] .tb-status {
+  background: transparent;
+  border: none;
+}
+[data-theme='win95'] .win-controls button {
+  width: 20px;
+  height: 18px;
+  margin: 0 1px;
+  color: #000;
+  background: #c0c0c0;
+  box-shadow: var(--raise);
+}
+[data-theme='win95'] .win-controls button:active {
+  box-shadow: var(--sink);
+}
+[data-theme='win95'] .win-controls button.close:hover {
+  background: #c0c0c0;
+  color: #000;
+}
+
+[data-theme='win95'] .sidebar {
+  background: #c0c0c0;
+  border-right: none;
+  box-shadow: var(--raise);
+  backdrop-filter: none;
+}
+
+[data-theme='win95'] .btn,
+[data-theme='win95'] .select,
+[data-theme='win95'] .seg,
+[data-theme='win95'] .act-seg,
+[data-theme='win95'] .chip,
+[data-theme='win95'] .color-pick {
+  background: #c0c0c0;
+  border: none;
+  border-radius: 0;
+  box-shadow: var(--raise);
+  color: #000;
+}
+[data-theme='win95'] .btn:hover:not(:disabled) {
+  background: #c8c8c8;
+}
+[data-theme='win95'] .btn:active:not(:disabled) {
+  box-shadow: var(--sink);
+}
+[data-theme='win95'] .btn.primary {
+  background: #c0c0c0;
+  color: #000;
+  font-weight: 700;
+}
+
+/* Утопленные поля — как в Проводнике */
+[data-theme='win95'] .input,
+[data-theme='win95'] textarea.input,
+[data-theme='win95'] .logs,
+[data-theme='win95'] .upd-notes {
+  background: #ffffff;
+  border: none;
+  border-radius: 0;
+  box-shadow: var(--sink);
+  color: #000;
+}
+[data-theme='win95'] .input:focus {
+  box-shadow: var(--sink);
+  outline: 1px dotted #000;
+  outline-offset: -4px;
+}
+
+/* Выделение — фирменный тёмно-синий */
+[data-theme='win95'] .nav-item .glow,
+[data-theme='win95'] .seg .pill,
+[data-theme='win95'] .act-seg .pill {
+  background: #000080;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+[data-theme='win95'] .nav-item.active,
+[data-theme='win95'] .seg button.active,
+[data-theme='win95'] .act-seg button.active {
+  color: #ffffff;
+}
+[data-theme='win95'] .nav-item:hover:not(.active) {
+  background: rgba(0, 0, 128, 0.12);
+}
+
+[data-theme='win95'] .table th {
+  background: #c0c0c0;
+  box-shadow: var(--raise);
+  color: #000;
+  border-bottom: none;
+}
+[data-theme='win95'] .section-title {
+  color: #04314a;
+}
+[data-theme='win95'] .page-head h1,
+[data-theme='win95'] .page-head p {
+  color: #ffffff;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.35);
+}
+[data-theme='win95'] .power {
+  box-shadow: none;
+}
+[data-theme='win95'] .toast {
+  background: #c0c0c0;
+  box-shadow: var(--raise), var(--shadow-lg);
+  color: #000;
+}
+
+[data-theme='win95'] .stat-grid {
+  background: #808080;
+  box-shadow: var(--sink);
+}
+[data-theme='win95'] .stat {
+  background: #c0c0c0;
+}
+[data-theme='win95'] .graph .legend,
+[data-theme='win95'] .graph .scale {
+  color: #1c1c1c;
 }

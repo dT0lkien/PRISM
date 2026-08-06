@@ -152,6 +152,8 @@ export interface Settings {
 
   theme: ThemeName
   accent: AccentName
+  /** Свои цвета акцента; заданы — пресет не используется */
+  accentCustom?: { a: string; b: string }
   graphStyle: GraphStyle
   language: 'ru' | 'en'
   logLevel: 'trace' | 'debug' | 'info' | 'warn' | 'error'
@@ -187,7 +189,7 @@ export interface UpdateState {
   checkedAt?: number
 }
 
-export type ThemeName = 'dark' | 'light' | 'aero' | 'glass'
+export type ThemeName = 'dark' | 'light' | 'aero' | 'glass' | 'win95'
 /** Как рисовать график трафика */
 export type GraphStyle = 'mirror' | 'area' | 'bars'
 export type AccentName = 'aurora' | 'violet' | 'ember' | 'ocean' | 'rose' | 'lime'
