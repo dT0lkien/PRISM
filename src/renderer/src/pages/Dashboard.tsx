@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { bytes, duration, speed, useStore } from '../store'
 import { Modal, Ping, Segmented, Switch, spring } from '../ui'
-import type { CaptureMode, RoutingMode } from '@shared/types'
+import type { CaptureMode, GraphStyle, RoutingMode } from '@shared/types'
 
 const ROUTING_LABELS: Record<RoutingMode, { label: string; hint: string }> = {
   smart: { label: 'Умный', hint: 'Российские сайты и игры — напрямую, остальное — через VPN' },
@@ -119,7 +119,7 @@ export default function Dashboard(): JSX.Element {
               <Stat k="Время" icon={<Timer size={11} />} v={running ? duration(uptime) : '—'} />
             </div>
 
-            <TrafficGraph />
+            <TrafficGraph style={snap.settings.graphStyle} />
           </div>
 
           <TopApps />
@@ -303,15 +303,15 @@ function PowerControl({
 /* ─────────────── график ─────────────── */
 
 const GW = 600 // ширина в единицах viewBox
-const GH = 110
-const GPAD = 7
+const GH = 130
+const PAD = 9
 const SPAN = 60 // сколько секунд видно
 const STEP = GW / SPAN
 
-const clampY = (v: number): number => Math.max(GPAD * 0.4, Math.min(GH, v))
+const clampY = (v: number, lo = 0, hi = GH): number => Math.max(lo, Math.min(hi, v))
 
 /** Catmull-Rom, переведённый в кубические Безье — мягкая линия без изломов */
-function smooth(p: { x: number; y: number }[]): string {
+function smooth(p: { x: number; y: number }[], lo = 0, hi = GH): string {
   if (p.length < 2) return ''
   const f = (n: number): string => n.toFixed(1)
   let d = `M${f(p[0].x)},${f(p[0].y)}`
@@ -321,16 +321,34 @@ function smooth(p: { x: number; y: number }[]): string {
     const p2 = p[i + 1]
     const p3 = p[i + 2] ?? p2
     const t = 0.18
-    const c1x = p1.x + (p2.x - p0.x) * t
-    const c1y = clampY(p1.y + (p2.y - p0.y) * t)
-    const c2x = p2.x - (p3.x - p1.x) * t
-    const c2y = clampY(p2.y - (p3.y - p1.y) * t)
-    d += ` C${f(c1x)},${f(c1y)} ${f(c2x)},${f(c2y)} ${f(p2.x)},${f(p2.y)}`
+    d +=
+      ` C${f(p1.x + (p2.x - p0.x) * t)},${f(clampY(p1.y + (p2.y - p0.y) * t, lo, hi))}` +
+      ` ${f(p2.x - (p3.x - p1.x) * t)},${f(clampY(p2.y - (p3.y - p1.y) * t, lo, hi))}` +
+      ` ${f(p2.x)},${f(p2.y)}`
   }
   return d
 }
 
-function TrafficGraph(): JSX.Element {
+/** Плавно подтягивает значение к цели — чтобы масштаб не прыгал при новом пике */
+function useEased(target: number): number {
+  const [v, setV] = useState(target)
+  const ref = useRef(target)
+  useEffect(() => {
+    let raf = 0
+    const tick = (): void => {
+      let cur = ref.current + (target - ref.current) * 0.16
+      if (Math.abs(cur - target) < Math.max(1, target * 0.005)) cur = target
+      ref.current = cur
+      setV(cur)
+      if (cur !== target) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [target])
+  return v
+}
+
+function TrafficGraph({ style }: { style: GraphStyle }): JSX.Element {
   const traffic = useStore((s) => s.traffic)
   const [hover, setHover] = useState<number | null>(null)
   const boxRef = useRef<HTMLDivElement>(null)
@@ -338,30 +356,18 @@ function TrafficGraph(): JSX.Element {
 
   // +2 точки про запас: одна уезжает за левый край во время прокрутки
   const pts = useMemo(() => traffic.slice(-(SPAN + 2)), [traffic])
-  const targetMax = useMemo(
-    () => Math.max(64 * 1024, ...pts.map((p) => Math.max(p.up, p.down))),
-    [pts]
-  )
 
-  /* Масштаб подтягиваем плавно — иначе при каждом новом пике график прыгает */
-  const [max, setMax] = useState(targetMax)
-  const maxRef = useRef(targetMax)
-  useEffect(() => {
-    let raf = 0
-    const tick = (): void => {
-      let cur = maxRef.current + (targetMax - maxRef.current) * 0.16
-      if (Math.abs(cur - targetMax) < targetMax * 0.005) cur = targetMax
-      maxRef.current = cur
-      setMax(cur)
-      if (cur !== targetMax) raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [targetMax])
+  const rawDown = useMemo(() => Math.max(64 * 1024, ...pts.map((p) => p.down)), [pts])
+  const rawUp = useMemo(() => Math.max(16 * 1024, ...pts.map((p) => p.up)), [pts])
+  const rawSum = useMemo(() => Math.max(64 * 1024, ...pts.map((p) => p.down + p.up)), [pts])
 
-  /* Горизонтальное скольжение: новый замер появляется справа, а полотно
-     уезжает влево ровно на один шаг за секунду — как в диспетчере задач.
-     Под курсором прокрутку замораживаем, чтобы подсказка не убегала. */
+  const dMax = useEased(rawDown)
+  const uMax = useEased(rawUp)
+  const bMax = useEased(Math.max(rawDown, rawUp))
+  const sMax = useEased(rawSum)
+
+  /* Горизонтальное скольжение: новый замер появляется справа, полотно уезжает
+     влево ровно на шаг за секунду. Под курсором замораживаем, иначе подсказка убегает. */
   const lastT = pts[pts.length - 1]?.t
   useEffect(() => {
     const g = slideRef.current
@@ -381,18 +387,30 @@ function TrafficGraph(): JSX.Element {
   }, [lastT, hover])
 
   const x = (i: number): number => (i - 1) * STEP
-  const y = (v: number): number => GH - GPAD - (v / max) * (GH - GPAD * 2)
+  const mid = GH / 2
 
   const geom = useMemo(() => {
+    if (style === 'mirror') {
+      const yD = (v: number): number => mid - (v / dMax) * (mid - PAD)
+      const yU = (v: number): number => mid + (v / uMax) * (mid - PAD)
+      const dP = pts.map((p, i) => ({ x: x(i), y: yD(p.down) }))
+      const uP = pts.map((p, i) => ({ x: x(i), y: yU(p.up) }))
+      const dLine = smooth(dP, PAD * 0.4, mid)
+      const uLine = smooth(uP, mid, GH - PAD * 0.4)
+      const close = (path: string): string =>
+        path ? `${path} L${x(pts.length - 1).toFixed(1)},${mid} L${x(0).toFixed(1)},${mid} Z` : ''
+      return { yD, yU, dLine, uLine, dArea: close(dLine), uArea: close(uLine) }
+    }
+    const y = (v: number): number => GH - PAD - (v / bMax) * (GH - PAD * 2)
     const dP = pts.map((p, i) => ({ x: x(i), y: y(p.down) }))
     const uP = pts.map((p, i) => ({ x: x(i), y: y(p.up) }))
+    const dLine = smooth(dP)
+    const uLine = smooth(uP)
     const close = (path: string): string =>
       path ? `${path} L${x(pts.length - 1).toFixed(1)},${GH} L${x(0).toFixed(1)},${GH} Z` : ''
-    const d = smooth(dP)
-    const u = smooth(uP)
-    return { d, u, dArea: close(d), uArea: close(u) }
+    return { yD: y, yU: y, dLine, uLine, dArea: close(dLine), uArea: close(uLine) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pts, max])
+  }, [pts, style, dMax, uMax, bMax])
 
   const onMove = (e: React.MouseEvent): void => {
     const r = boxRef.current?.getBoundingClientRect()
@@ -404,71 +422,105 @@ function TrafficGraph(): JSX.Element {
   const hp = hover !== null ? pts[hover] : null
   const hx = hover !== null ? x(hover) : 0
   const tipSide = hx > GW * 0.72 ? 'right' : hx < GW * 0.28 ? 'left' : 'mid'
+  const barW = STEP * 0.66
 
   return (
-    <div
-      className="graph"
-      ref={boxRef}
-      onMouseMove={onMove}
-      onMouseLeave={() => setHover(null)}
-    >
+    <div className="graph" ref={boxRef} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
       <div className="legend">
         <span>
           <i style={{ background: 'var(--accent-1)' }} />
-          вниз
+          Скачивание
         </span>
         <span>
           <i style={{ background: 'var(--accent-2)' }} />
-          вверх
+          Отдача
         </span>
-        <span className="dim tnum">пик {bytes(targetMax)}/с</span>
       </div>
+
+      {/* Подписи масштаба — иначе непонятно, о каких величинах речь */}
+      {style === 'mirror' ? (
+        <>
+          <span className="scale top">{speed(dMax)}</span>
+          <span className="scale bottom">{speed(uMax)}</span>
+        </>
+      ) : (
+        <span className="scale top">{speed(style === 'bars' ? sMax : bMax)}</span>
+      )}
 
       <svg viewBox={`0 0 ${GW} ${GH}`} preserveAspectRatio="none">
         <defs>
           <linearGradient id="g-down" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--accent-1)" stopOpacity="0.42" />
-            <stop offset="100%" stopColor="var(--accent-1)" stopOpacity="0" />
+            <stop offset="0%" stopColor="var(--accent-1)" stopOpacity="0.45" />
+            <stop offset="100%" stopColor="var(--accent-1)" stopOpacity="0.02" />
           </linearGradient>
-          <linearGradient id="g-up" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--accent-2)" stopOpacity="0.26" />
-            <stop offset="100%" stopColor="var(--accent-2)" stopOpacity="0" />
+          <linearGradient id="g-up" x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0%" stopColor="var(--accent-2)" stopOpacity="0.42" />
+            <stop offset="100%" stopColor="var(--accent-2)" stopOpacity="0.02" />
+          </linearGradient>
+          <linearGradient id="g-bar-d" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--accent-1)" stopOpacity="0.95" />
+            <stop offset="100%" stopColor="var(--accent-1)" stopOpacity="0.35" />
           </linearGradient>
         </defs>
 
-        {[0.25, 0.5, 0.75].map((f) => (
-          <line key={f} x1="0" y1={GH * f} x2={GW} y2={GH * f} stroke="var(--line)" strokeWidth="1" />
-        ))}
+        {style === 'mirror' ? (
+          <line x1="0" y1={mid} x2={GW} y2={mid} stroke="var(--line-2)" strokeWidth="1" />
+        ) : (
+          [0.25, 0.5, 0.75].map((f) => (
+            <line key={f} x1="0" y1={GH * f} x2={GW} y2={GH * f} stroke="var(--line)" strokeWidth="1" />
+          ))
+        )}
 
         <g ref={slideRef}>
-          {geom.uArea && <path d={geom.uArea} fill="url(#g-up)" />}
-          {geom.dArea && <path d={geom.dArea} fill="url(#g-down)" />}
-          {geom.u && (
-            <path
-              d={geom.u}
-              fill="none"
-              stroke="var(--accent-2)"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              vectorEffect="non-scaling-stroke"
-            />
-          )}
-          {geom.d && (
-            <path
-              d={geom.d}
-              fill="none"
-              stroke="var(--accent-1)"
-              strokeWidth="2"
-              strokeLinecap="round"
-              vectorEffect="non-scaling-stroke"
-            />
+          {style === 'bars' ? (
+            pts.map((p, i) => {
+              const total = p.down + p.up
+              const hAll = (total / sMax) * (GH - PAD * 2)
+              const hUp = total > 0 ? hAll * (p.up / total) : 0
+              return (
+                <g key={p.t}>
+                  <rect
+                    x={x(i) - barW / 2}
+                    y={GH - hAll}
+                    width={barW}
+                    height={Math.max(0, hAll - hUp)}
+                    rx={1.5}
+                    fill="url(#g-bar-d)"
+                  />
+                  <rect
+                    x={x(i) - barW / 2}
+                    y={GH - hUp}
+                    width={barW}
+                    height={Math.max(0, hUp)}
+                    rx={1.5}
+                    fill="var(--accent-2)"
+                    opacity="0.85"
+                  />
+                </g>
+              )
+            })
+          ) : (
+            <>
+              {geom.uArea && <path d={geom.uArea} fill="url(#g-up)" />}
+              {geom.dArea && <path d={geom.dArea} fill="url(#g-down)" />}
+              {geom.uLine && (
+                <path d={geom.uLine} fill="none" stroke="var(--accent-2)" strokeWidth="1.7" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+              )}
+              {geom.dLine && (
+                <path d={geom.dLine} fill="none" stroke="var(--accent-1)" strokeWidth="2.1" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+              )}
+            </>
           )}
 
           {hp && (
             <>
               <line x1={hx} y1="0" x2={hx} y2={GH} stroke="var(--line-2)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-              <circle cx={hx} cy={y(hp.down)} r="3.5" fill="var(--accent-1)" stroke="var(--bg)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
-              <circle cx={hx} cy={y(hp.up)} r="3" fill="var(--accent-2)" stroke="var(--bg)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+              {style !== 'bars' && (
+                <>
+                  <circle cx={hx} cy={geom.yD(hp.down)} r="3.5" fill="var(--accent-1)" stroke="var(--bg)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                  <circle cx={hx} cy={geom.yU(hp.up)} r="3" fill="var(--accent-2)" stroke="var(--bg)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                </>
+              )}
             </>
           )}
         </g>

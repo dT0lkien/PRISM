@@ -14,15 +14,16 @@ import {
   Unplug
 } from 'lucide-react'
 import { DNS_PRESETS_LOCAL, DNS_PRESETS_REMOTE } from '@shared/defaults'
-import type { AccentName, DnsStrategy, ThemeName, TunStack } from '@shared/types'
+import type { AccentName, DnsStrategy, GraphStyle, ThemeName, TunStack } from '@shared/types'
 import { ACCENTS, bytes, speed, useStore } from '../store'
-import { Modal, Setting, Switch } from '../ui'
+import { Modal, Segmented, Setting, Switch } from '../ui'
 import logo from '../assets/logo.png'
 
 const THEMES: { id: ThemeName; label: string; hint: string }[] = [
   { id: 'dark', label: 'Тёмная', hint: 'По умолчанию' },
   { id: 'light', label: 'Светлая', hint: 'Для яркого света' },
-  { id: 'aero', label: 'Aero', hint: 'В духе XP и Vista' }
+  { id: 'aero', label: 'Aero', hint: 'В духе XP и Vista' },
+  { id: 'glass', label: 'Liquid Glass', hint: 'Матовое стекло' }
 ]
 
 /** Маленький макет окна — понятнее, чем название темы в списке */
@@ -32,7 +33,9 @@ function ThemePreview({ id }: { id: ThemeName }): JSX.Element {
       ? { bg: 'linear-gradient(160deg,#0e1421,#070a11)', bar: 'rgba(255,255,255,.07)', card: 'rgba(255,255,255,.07)', line: 'rgba(255,255,255,.16)', radius: 4 }
       : id === 'light'
         ? { bg: 'linear-gradient(160deg,#f7f9fc,#e8ecf4)', bar: 'rgba(15,23,42,.06)', card: '#fff', line: 'rgba(15,23,42,.14)', radius: 4 }
-        : { bg: 'linear-gradient(170deg,#a9cff0,#4f86c6)', bar: 'rgba(255,255,255,.65)', card: 'rgba(255,255,255,.8)', line: 'rgba(11,42,92,.3)', radius: 2 }
+        : id === 'aero'
+          ? { bg: 'linear-gradient(170deg,#a9cff0,#4f86c6)', bar: 'rgba(255,255,255,.65)', card: 'rgba(255,255,255,.8)', line: 'rgba(11,42,92,.3)', radius: 2 }
+          : { bg: 'radial-gradient(120% 100% at 15% 0%, #3b82f6 0%, #7c3aed 55%, #0a0f1c 100%)', bar: 'rgba(255,255,255,.14)', card: 'rgba(255,255,255,.16)', line: 'rgba(255,255,255,.3)', radius: 7 }
 
   const glossy = id === 'aero'
   return (
@@ -449,6 +452,19 @@ export default function SettingsPage(): JSX.Element {
             ))}
           </div>
         </div>
+
+        <Setting title="Вид графика" hint="Как рисовать трафик на главной странице">
+          <Segmented<GraphStyle>
+            id="graph"
+            value={s.graphStyle}
+            onChange={(v) => patchSettings({ graphStyle: v })}
+            options={[
+              { value: 'mirror', label: 'Зеркало' },
+              { value: 'area', label: 'Волна' },
+              { value: 'bars', label: 'Столбики' }
+            ]}
+          />
+        </Setting>
 
         <div className="setting">
           <div className="txt">

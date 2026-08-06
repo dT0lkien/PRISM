@@ -63,6 +63,7 @@ const settings = {
   startMinimized: false,
   theme: 'dark',
   accent: 'aurora',
+  graphStyle: process.env.PRISM_GRAPH || 'mirror',
   language: 'ru',
   logLevel: 'info',
   extraConfig: '',

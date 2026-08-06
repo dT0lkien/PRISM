@@ -1115,7 +1115,7 @@ textarea.input {
 
 .graph {
   width: 100%;
-  height: 120px;
+  height: 138px;
   margin-top: 18px;
   position: relative;
 }
@@ -1707,4 +1707,136 @@ textarea.input {
   border: 1px solid color-mix(in oklab, var(--ok) 32%, transparent);
   cursor: pointer;
   width: 100%;
+}
+
+
+/* подписи масштаба по краям графика */
+.graph .scale {
+  position: absolute;
+  right: 0;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dim);
+  pointer-events: none;
+}
+.graph .scale.top {
+  top: 22px;
+}
+.graph .scale.bottom {
+  bottom: 0;
+}
+
+/* ═══ Liquid Glass — толстое матовое стекло с бликом по кромке ═══ */
+[data-theme='glass'] {
+  --bg: #0a0f1c;
+  --bg-2: #101a30;
+  --panel: rgba(255, 255, 255, 0.09);
+  --panel-2: rgba(255, 255, 255, 0.15);
+  --panel-3: rgba(255, 255, 255, 0.2);
+  --line: rgba(255, 255, 255, 0.16);
+  --line-2: rgba(255, 255, 255, 0.3);
+  --text: #f4f7ff;
+  --muted: #ccd5e8;
+  --dim: #a7b3cc;
+  /* Плёнка тоньше обычной: стеклу нужен цвет под собой, иначе размывать нечего */
+  --scrim: linear-gradient(170deg, rgba(8, 12, 24, 0.3), rgba(8, 12, 24, 0.58) 60%, rgba(8, 12, 24, 0.7));
+
+  --r-sm: 11px;
+  --r: 17px;
+  --r-lg: 24px;
+  --r-xl: 32px;
+
+  --shadow: 0 10px 34px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.55);
+
+  --glass: blur(30px) saturate(180%);
+  /* Блик сверху и лёгкая тень снизу — то, что делает стекло объёмным */
+  --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.42), inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 22px rgba(255, 255, 255, 0.05);
+}
+
+[data-theme='glass'] .aurora {
+  opacity: 0.95;
+  filter: blur(90px);
+}
+
+[data-theme='glass'] .card,
+[data-theme='glass'] .modal,
+[data-theme='glass'] .app-row,
+[data-theme='glass'] .node,
+[data-theme='glass'] .rule,
+[data-theme='glass'] .preset,
+[data-theme='glass'] .theme-card {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: var(--glass-edge), 0 8px 30px rgba(0, 0, 0, 0.3);
+}
+[data-theme='glass'] .card.hero {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='glass'] .titlebar,
+[data-theme='glass'] .sidebar {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+[data-theme='glass'] .titlebar {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+[data-theme='glass'] .btn,
+[data-theme='glass'] .select,
+[data-theme='glass'] .input,
+[data-theme='glass'] .chip,
+[data-theme='glass'] .seg,
+[data-theme='glass'] .act-seg {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+[data-theme='glass'] .btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.17);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+[data-theme='glass'] .btn.primary {
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--accent-1) 78%, transparent),
+    color-mix(in oklab, var(--accent-2) 78%, transparent)
+  );
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 6px 20px color-mix(in oklab, var(--accent-1) 30%, transparent);
+  color: #fff;
+}
+
+[data-theme='glass'] .nav-item .glow,
+[data-theme='glass'] .seg .pill,
+[data-theme='glass'] .act-seg .pill {
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--accent-1) 40%, transparent),
+    color-mix(in oklab, var(--accent-2) 34%, transparent)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+[data-theme='glass'] .logs,
+[data-theme='glass'] .upd-notes {
+  background: rgba(0, 0, 0, 0.22);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+[data-theme='glass'] .table th {
+  background: rgba(16, 24, 44, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+[data-theme='glass'] .power {
+  filter: drop-shadow(0 10px 26px color-mix(in oklab, var(--accent-1) 28%, transparent));
 }

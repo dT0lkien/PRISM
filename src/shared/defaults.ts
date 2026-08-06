@@ -42,6 +42,7 @@ export const DEFAULT_SETTINGS: Settings = {
 
   theme: 'dark',
   accent: 'aurora',
+  graphStyle: 'mirror',
   language: 'ru',
   logLevel: 'info',
 

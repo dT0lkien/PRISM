@@ -61,7 +61,9 @@ async function main(): Promise<void> {
     ],
     outbounds: [{ type: 'direct', tag: 'direct' }],
     route: { final: 'direct', default_domain_resolver: { server: 'd' } },
-    dns: { servers: [{ type: 'udp', tag: 'd', server: '1.1.1.1' }] }
+    // Системный резолвер, а не жёстко прописанный 1.1.1.1: в сети с
+    // заблокированным UDP/53 наружу тест падал бы не по своей вине
+    dns: { servers: [{ type: 'local', tag: 'd' }] }
   }
   const upFile = join(TMP, 'upstream.json')
   writeFileSync(upFile, JSON.stringify(upCfg, null, 2))
@@ -150,6 +152,7 @@ async function main(): Promise<void> {
     if (res.status !== 200) {
       console.log('\n  ── журнал ядра ──')
       console.log(logs.slice(-18).map((l) => `  ${l}`).join('\n'))
+      if (upErr.trim()) console.log('\n  ── ошибки upstream ──\n' + upErr.trim())
     }
   }
 

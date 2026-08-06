@@ -152,6 +152,7 @@ export interface Settings {
 
   theme: ThemeName
   accent: AccentName
+  graphStyle: GraphStyle
   language: 'ru' | 'en'
   logLevel: 'trace' | 'debug' | 'info' | 'warn' | 'error'
 
@@ -186,7 +187,9 @@ export interface UpdateState {
   checkedAt?: number
 }
 
-export type ThemeName = 'dark' | 'light' | 'aero'
+export type ThemeName = 'dark' | 'light' | 'aero' | 'glass'
+/** Как рисовать график трафика */
+export type GraphStyle = 'mirror' | 'area' | 'bars'
 export type AccentName = 'aurora' | 'violet' | 'ember' | 'ocean' | 'rose' | 'lime'
 
 /* ─────────────────────────── Рантайм ─────────────────────────── */
