@@ -45,6 +45,19 @@ class TunnelService : VpnService(), PlatformInterface, CommandServerHandler {
         const val ACTION_START = "com.prism.vpn.START"
         const val ACTION_STOP = "com.prism.vpn.STOP"
 
+        // Флаги интерфейса из <net/if.h>: ConnectivityManager их не отдаёт,
+        // а ядру они нужны, чтобы считать интерфейс живым
+        private const val IFF_UP = 0x1
+        private const val IFF_BROADCAST = 0x2
+        private const val IFF_RUNNING = 0x40
+        private const val IFF_MULTICAST = 0x1000
+
+        // Тип интерфейса в терминах libbox
+        private const val INTERFACE_WIFI = 0
+        private const val INTERFACE_CELLULAR = 1
+        private const val INTERFACE_ETHERNET = 2
+        private const val INTERFACE_OTHER = 3
+
         private const val CHANNEL = "prism.tunnel"
         private const val NOTIFICATION_ID = 1
 
@@ -255,6 +268,18 @@ class TunnelService : VpnService(), PlatformInterface, CommandServerHandler {
                 index = runCatching { android.system.Os.if_nametoindex(interfaceName) }.getOrDefault(0)
                 mtu = properties.mtu.takeIf { it > 0 } ?: 1500
                 metered = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == false
+                // Флаги обязательны: интерфейс без IFF_UP и IFF_RUNNING ядро
+                // считает выключенным и отвечает «no available network interface»
+                // на любой исходящий запрос, включая DNS. ConnectivityManager их
+                // не отдаёт, но раз сеть в списке — она поднята и работает.
+                flags = IFF_UP or IFF_BROADCAST or IFF_RUNNING or IFF_MULTICAST
+                type = when {
+                    caps == null -> INTERFACE_OTHER
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> INTERFACE_WIFI
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> INTERFACE_CELLULAR
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> INTERFACE_ETHERNET
+                    else -> INTERFACE_OTHER
+                }
                 addresses = StringArray(
                     properties.linkAddresses.mapNotNull { link ->
                         val host = link.address?.hostAddress ?: return@mapNotNull null
