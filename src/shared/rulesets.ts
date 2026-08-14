@@ -64,6 +64,19 @@ export const RULE_SETS: RuleSetInfo[] = [
 
 export const RULE_SET_TAGS = new Set(RULE_SETS.map((r) => r.tag))
 
+/** Адрес правила в апстриме SagerNet — тот же источник, откуда их берёт
+    scripts/fetch-resources.mjs для Windows-сборки.
+
+    Нужен на iOS: складывать 30+ файлов .srs в бандл приложения и обновлять их
+    выпуском новой версии бессмысленно, поэтому там правила подключаются как
+    remote и обновляются сами. */
+export function ruleSetUrl(tag: string): string {
+  // Единственное расхождение имён: локально category-ai, в апстриме category-ai-!cn
+  const file = tag === 'geosite-category-ai' ? 'geosite-category-ai-!cn' : tag
+  const repo = tag.startsWith('geoip-') ? 'sing-geoip' : 'sing-geosite'
+  return `https://raw.githubusercontent.com/SagerNet/${repo}/rule-set/${file}.srs`
+}
+
 export function ruleSetLabel(tag: string): string {
   return RULE_SETS.find((r) => r.tag === tag)?.label ?? tag
 }

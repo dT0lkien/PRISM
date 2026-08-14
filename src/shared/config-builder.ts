@@ -3,7 +3,14 @@
 
 import type { AppRule, Matcher, RoutingRule, RuleAction, ServerNode, Settings } from './types'
 import { DISCORD_DOMAINS, presetById } from './presets'
-import { RULE_SET_TAGS } from './rulesets'
+import { RULE_SET_TAGS, ruleSetUrl } from './rulesets'
+
+/** Платформа, под которую собирается конфиг.
+
+    Отличий три, и все вынуждены устройством iOS: туннель там поднимает
+    NetworkExtension, маршрутизации по процессам не существует, а файлов правил
+    рядом с приложением нет. Всё остальное у платформ общее. */
+export type ConfigPlatform = 'windows' | 'ios'
 
 export const TAG_PROXY = 'proxy'
 export const TAG_DIRECT = 'direct'
@@ -16,7 +23,9 @@ export interface BuildContext {
   appRules: AppRule[]
   customRules: RoutingRule[]
   enabledPresets: string[]
-  /** Каталог с .srs файлами */
+  /** По умолчанию windows — чтобы существующие вызовы вели себя как раньше */
+  platform?: ConfigPlatform
+  /** Каталог с .srs файлами. На iOS не используется: правила там remote */
   rulesDir: string
   /** Файл кэша (fakeip / результаты urltest) */
   cachePath: string
@@ -38,12 +47,18 @@ function tagFor(action: RuleAction): string | undefined {
   return action === 'proxy' ? TAG_PROXY : action === 'direct' ? TAG_DIRECT : undefined
 }
 
-/** Matcher[] → поля правила sing-box. null если правило пустое. */
-function matchersToRule(matchers: Matcher[]): Json | null {
+/** Matcher[] → поля правила sing-box. null если правило пустое.
+
+    skipProcess выбрасывает условия по процессам — на iOS их не существует.
+    Правило при этом может остаться без единого условия; тогда функция вернёт
+    null и вызывающий его отбросит. Это принципиально: правило, потерявшее
+    единственное условие, совпадало бы со всем трафиком подряд. */
+function matchersToRule(matchers: Matcher[], skipProcess = false): Json | null {
   const r: Json = {}
   for (const m of matchers) {
     const vals = m.values.map((v) => v.trim()).filter(Boolean)
     if (!vals.length) continue
+    if (skipProcess && (m.kind === 'process' || m.kind === 'process_path')) continue
     switch (m.kind) {
       case 'process':
         r.process_name = [...(r.process_name ?? []), ...vals]
@@ -143,6 +158,7 @@ export function parseDnsServer(raw: string, tag: string, detour?: string): Json 
 
 export function buildConfig(ctx: BuildContext): Json {
   const { settings: st } = ctx
+  const isIos = ctx.platform === 'ios'
   const usedRuleSets = new Set<string>()
   const routeRules: Json[] = []
 
@@ -167,22 +183,28 @@ export function buildConfig(ctx: BuildContext): Json {
     routeRules.push({ network: ['udp'], port: [443], action: 'reject', method: 'default' })
   }
 
-  /* ── 3. Правила по приложениям (высший пользовательский приоритет) ── */
-  const byAction: Record<RuleAction, string[]> = { proxy: [], direct: [], block: [] }
-  for (const a of ctx.appRules) {
-    if (a.enabled && a.exe.trim()) byAction[a.action].push(a.exe.trim())
-  }
-  for (const action of ['block', 'direct', 'proxy'] as RuleAction[]) {
-    if (byAction[action].length) {
-      const tag = tagFor(action)
-      routeRules.push(drop({ process_name: byAction[action], outbound: tag, action: tag ? undefined : 'reject' }))
+  /* ── 3. Правила по приложениям (высший пользовательский приоритет) ──
+     На iOS пропускаются целиком: process_name там неприменим — система не даёт
+     туннелю узнать, какому приложению принадлежит трафик. Раздельная
+     маршрутизация по приложениям на iOS существует только как per-app VPN
+     под управлением MDM и к обычной установке отношения не имеет. */
+  if (!isIos) {
+    const byAction: Record<RuleAction, string[]> = { proxy: [], direct: [], block: [] }
+    for (const a of ctx.appRules) {
+      if (a.enabled && a.exe.trim()) byAction[a.action].push(a.exe.trim())
+    }
+    for (const action of ['block', 'direct', 'proxy'] as RuleAction[]) {
+      if (byAction[action].length) {
+        const tag = tagFor(action)
+        routeRules.push(drop({ process_name: byAction[action], outbound: tag, action: tag ? undefined : 'reject' }))
+      }
     }
   }
 
   /* ── 4. Пользовательские правила (в порядке списка) ── */
   for (const rule of ctx.customRules) {
     if (!rule.enabled) continue
-    const r = noteRuleSets(matchersToRule(rule.matchers))
+    const r = noteRuleSets(matchersToRule(rule.matchers, isIos))
     if (!r) continue
     const tag = rule.outboundTag ?? tagFor(rule.action)
     routeRules.push(drop({ ...r, outbound: tag, action: tag ? undefined : 'reject' }))
@@ -195,7 +217,7 @@ export function buildConfig(ctx: BuildContext): Json {
   activePresets.sort((a, b) => order[a!.group] - order[b!.group])
   for (const p of activePresets) {
     for (const pr of p!.rules) {
-      const r = noteRuleSets(matchersToRule(pr.matchers))
+      const r = noteRuleSets(matchersToRule(pr.matchers, isIos))
       if (!r) continue
       const tag = tagFor(pr.action)
       routeRules.push(drop({ ...r, outbound: tag, action: tag ? undefined : 'reject' }))
@@ -278,7 +300,9 @@ export function buildConfig(ctx: BuildContext): Json {
 
   /* ── Inbounds ── */
   const inbounds: Json[] = []
-  if (st.captureMode === 'tun') {
+  // На iOS туннель существует всегда: режима «только системный прокси» там нет,
+  // трафик приходит из NetworkExtension, и tun — точка его входа в ядро.
+  if (st.captureMode === 'tun' || isIos) {
     inbounds.push(
       drop({
         type: 'tun',
@@ -286,7 +310,11 @@ export function buildConfig(ctx: BuildContext): Json {
         address: st.tun.ipv6 ? ['172.19.0.1/30', 'fdfe:dcba:9876::1/126'] : ['172.19.0.1/30'],
         mtu: st.tun.mtu,
         auto_route: st.tun.autoRoute,
-        strict_route: st.tun.strictRoute,
+        // strict_route действует только на Windows и Linux. Схему конфига поле
+        // проходит везде и ядро молча его примет — тем важнее не оставлять его
+        // на iOS: маршрутизацией там ведает NetworkExtension, и поле создавало бы
+        // ложное впечатление, будто оно на что-то влияет
+        strict_route: isIos ? undefined : st.tun.strictRoute,
         stack: st.tun.stack,
         // Эти процессы ядро вообще не заворачивает в TUN
         exclude_package: undefined
@@ -350,12 +378,25 @@ export function buildConfig(ctx: BuildContext): Json {
   outbounds.push({ type: 'direct', tag: TAG_DIRECT })
 
   /* ── rule_set (только реально задействованные) ── */
-  const ruleSetDefs = [...usedRuleSets].map((tag) => ({
-    type: 'local',
-    tag,
-    format: 'binary',
-    path: joinPath(ctx.rulesDir, `${tag}.srs`)
-  }))
+  const ruleSetDefs = [...usedRuleSets].map((tag) =>
+    isIos
+      ? {
+          type: 'remote',
+          tag,
+          format: 'binary',
+          url: ruleSetUrl(tag),
+          // Через прокси, а не напрямую: raw.githubusercontent.com у многих
+          // провайдеров закрыт, и напрямую правила просто не приедут
+          download_detour: TAG_PROXY,
+          update_interval: '7d'
+        }
+      : {
+          type: 'local',
+          tag,
+          format: 'binary',
+          path: joinPath(ctx.rulesDir, `${tag}.srs`)
+        }
+  )
 
   const config: Json = {
     log: { level: st.logLevel, timestamp: true },

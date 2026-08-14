@@ -1,8 +1,9 @@
 /* Загрузка и разбор подписок: base64-списки, plain-ссылки, Clash YAML, sing-box JSON. */
 
 import { parse as parseYaml } from 'yaml'
-import { b64decode, clashProxyToNode, looksBase64, nodeKey, parseLink, parsedToNode, uid } from '@shared/parsers'
-import type { ImportResult, NodeType, ServerNode, Subscription } from '@shared/types'
+import { nodeKey } from '@shared/parsers'
+import { parseSubscriptionBody as parseBody } from '@shared/subscriptions'
+import type { ImportResult, ServerNode, Subscription } from '@shared/types'
 
 const UA = 'sing-box/1.13.15 (Prism)'
 
@@ -22,79 +23,10 @@ function parseUserInfo(header: string | null): Subscription['userInfo'] | undefi
 }
 
 /** Текст подписки → массив узлов. Формат определяем по содержимому. */
+/** Сам разбор живёт в @shared/subscriptions — общий с iOS. Здесь только
+    подключается парсер YAML: на десктопе он есть, в JavaScriptCore его нет. */
 export function parseSubscriptionBody(body: string, subscriptionId?: string): ServerNode[] {
-  const text = body.trim()
-  if (!text) return []
-  const nodes: ServerNode[] = []
-
-  const pushLinks = (raw: string) => {
-    for (const line of raw.split(/\r?\n/)) {
-      const l = line.trim()
-      if (!l || l.startsWith('#') || l.startsWith('//')) continue
-      const p = parseLink(l)
-      if (p) nodes.push(parsedToNode(p, { link: l, subscriptionId }))
-    }
-  }
-
-  // 1. sing-box JSON
-  if (text.startsWith('{') || text.startsWith('[')) {
-    try {
-      const j = JSON.parse(text)
-      const list: any[] = Array.isArray(j) ? j : (j.outbounds ?? [])
-      for (const ob of list) {
-        if (!ob?.type || ['selector', 'urltest', 'direct', 'block', 'dns'].includes(ob.type)) continue
-        const { tag, ...rest } = ob
-        nodes.push({
-          id: uid(),
-          name: String(tag ?? `${ob.server}:${ob.server_port}`),
-          type: ob.type as NodeType,
-          server: String(ob.server ?? ''),
-          port: Number(ob.server_port ?? 0),
-          outbound: rest,
-          subscriptionId,
-          createdAt: Date.now()
-        })
-      }
-      if (nodes.length) return nodes
-    } catch {
-      /* не JSON — идём дальше */
-    }
-  }
-
-  // 2. Clash YAML
-  if (/^\s*(proxies|proxy-groups|port|mixed-port)\s*:/m.test(text)) {
-    try {
-      const y = parseYaml(text)
-      for (const p of y?.proxies ?? []) {
-        const parsed = clashProxyToNode(p)
-        if (parsed) nodes.push(parsedToNode(parsed, { subscriptionId }))
-      }
-      if (nodes.length) return nodes
-    } catch {
-      /* не YAML — идём дальше */
-    }
-  }
-
-  // 3. Список ссылок как есть
-  if (/^[a-z0-9]+:\/\//im.test(text)) {
-    pushLinks(text)
-    if (nodes.length) return nodes
-  }
-
-  // 4. base64 от списка ссылок
-  if (looksBase64(text)) {
-    const decoded = b64decode(text)
-    if (decoded) {
-      pushLinks(decoded)
-      if (nodes.length) return nodes
-      // Вложенный YAML/JSON внутри base64
-      if (decoded.trim().startsWith('{') || /^\s*proxies\s*:/m.test(decoded)) {
-        return parseSubscriptionBody(decoded, subscriptionId)
-      }
-    }
-  }
-
-  return nodes
+  return parseBody(body, subscriptionId, parseYaml)
 }
 
 export async function fetchSubscription(url: string, subscriptionId?: string): Promise<FetchedSub> {

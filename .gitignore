@@ -6,6 +6,15 @@ shots/
 # Ядро качается скриптом: 100 МБ бинарников не должны попасть в историю git
 resources/core/
 
+# Сборка Swift и генерируемый проект Xcode (описание лежит в ios/project.yml)
+.build/
+.swiftpm/
+ios/*.xcodeproj/
+ios/Libbox.xcframework/
+# Info.plist собирает xcodegen из project.yml — источник правды там
+ios/Prism/Info.plist
+ios/PrismTunnel/Info.plist
+
 *.log
 npm-debug.log*
 .DS_Store
