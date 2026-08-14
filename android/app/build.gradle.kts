@@ -26,6 +26,8 @@ android {
 
     buildFeatures {
         compose = true
+        // Нужен для номера версии на экране «О программе»
+        buildConfig = true
     }
 
     compileOptions {

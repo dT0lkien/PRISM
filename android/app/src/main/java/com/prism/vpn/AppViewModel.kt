@@ -43,14 +43,84 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val prefs = app.getSharedPreferences("prism", Context.MODE_PRIVATE)
 
+    /**
+     * Настройки хранятся тем же JSON, что понимает общее ядро, а не отдельным
+     * набором полей. Так добавление новой настройки в src/shared не требует
+     * править ни хранилище, ни мост — только экран.
+     */
+    var settings by mutableStateOf<JSONObject?>(null)
+        private set
+    var enabledPresets by mutableStateOf<List<String>>(emptyList())
+        private set
+
     init {
         load()
         viewModelScope.launch {
             try {
-                core = PrismCore.create(getApplication())
+                val core = PrismCore.create(getApplication())
+                this@AppViewModel.core = core
+                loadSettings(core)
             } catch (e: Throwable) {
                 coreFailure = e.message ?: "Общее ядро не загрузилось"
             }
+        }
+    }
+
+    // MARK: - Настройки
+
+    private suspend fun loadSettings(core: PrismCore) {
+        val stored = prefs.getString("settings", null)
+        settings = stored?.let { runCatching { JSONObject(it) }.getOrNull() } ?: core.defaultSettings()
+        val presets = prefs.getString("presets", null)
+        enabledPresets = presets
+            ?.let { runCatching { JSONArray(it) }.getOrNull() }
+            ?.let { array -> (0 until array.length()).map { array.optString(it) } }
+            ?: core.defaultEnabledPresets()
+    }
+
+    /**
+     * Правит настройку по пути вида "dns.blockAds". Путь, а не отдельный метод
+     * на каждое поле: настроек в ядре несколько десятков, и заводить под каждую
+     * свой сеттер значит переписывать модель при любом их пополнении.
+     */
+    fun setSetting(path: String, value: Any) {
+        val root = settings ?: return
+        val copy = JSONObject(root.toString())
+        val parts = path.split('.')
+        var node = copy
+        for (part in parts.dropLast(1)) {
+            node = node.optJSONObject(part) ?: return
+        }
+        node.put(parts.last(), value)
+        settings = copy
+        prefs.edit().putString("settings", copy.toString()).apply()
+        noteRestartNeeded()
+    }
+
+    fun booleanSetting(path: String, fallback: Boolean = false): Boolean {
+        var node = settings ?: return fallback
+        val parts = path.split('.')
+        for (part in parts.dropLast(1)) node = node.optJSONObject(part) ?: return fallback
+        return node.optBoolean(parts.last(), fallback)
+    }
+
+    fun stringSetting(path: String, fallback: String = ""): String {
+        var node = settings ?: return fallback
+        val parts = path.split('.')
+        for (part in parts.dropLast(1)) node = node.optJSONObject(part) ?: return fallback
+        return node.optString(parts.last(), fallback)
+    }
+
+    fun togglePreset(id: String) {
+        enabledPresets = if (id in enabledPresets) enabledPresets - id else enabledPresets + id
+        prefs.edit().putString("presets", JSONArray(enabledPresets).toString()).apply()
+        noteRestartNeeded()
+    }
+
+    /** Ядро читает конфиг при запуске, поэтому правки применятся не сразу */
+    private fun noteRestartNeeded() {
+        if (tunnelState == TunnelState.On) {
+            status = "Настройки применятся после переподключения"
         }
     }
 
@@ -240,7 +310,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val cache = context.filesDir.resolve("cache.db").absolutePath
         // Правила распаковываются из ресурсов: ядру нужны файлы на диске
         val rules = withContext(Dispatchers.IO) { TunnelStore.rulesDir(context) }
-        return core.configJson(nodes, activeNodeId, cache, rules)
+        return core.configJson(
+            nodes = nodes,
+            activeNodeId = activeNodeId,
+            cachePath = cache,
+            rulesDir = rules,
+            settings = settings ?: core.defaultSettings(),
+            enabledPresets = enabledPresets.ifEmpty { core.defaultEnabledPresets() }
+        )
     }
 
     // MARK: - Хранение

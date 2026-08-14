@@ -98,6 +98,9 @@ class PrismCore private constructor(
     suspend fun defaultEnabledPresets(): List<String> =
         evalArray("PrismShared.DEFAULT_ENABLED_PRESETS").toStringList()
 
+    /** Описания правил маршрутизации — берутся из ядра, а не дублируются в экране */
+    suspend fun presets(): JSONArray = evalArray("PrismShared.PRESETS")
+
     // MARK: - Узлы
 
     /** Разбирает список ссылок, по одной на строку. Нераспознанные пропускаются. */
@@ -142,10 +145,11 @@ class PrismCore private constructor(
         nodes: List<ServerNode>,
         activeNodeId: String?,
         cachePath: String,
-        rulesDir: String
+        rulesDir: String,
+        settings: JSONObject,
+        enabledPresets: List<String>
     ): String {
-        val settings = defaultSettings()
-        val presets = JSONArray(defaultEnabledPresets())
+        val presets = JSONArray(enabledPresets)
         val nodesJson = JSONArray().apply { nodes.forEach { put(it.json) } }
 
         return eval(

@@ -10,75 +10,98 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /**
- * Оформление Prism.
+ * Оформление Prism в системе координат Apple.
  *
- * Название приложения — про призму, разлагающую белый свет в спектр, и это же
- * положено в основу вида: тёмная база как фон логотипа, спектральный градиент
- * как единственный яркий акцент. Светлой темы нет намеренно — приложение
- * состоит из одного главного экрана, который должен читаться как прибор,
- * а не как список настроек.
+ * Взяты именно те решения, которые делают интерфейсы Apple узнаваемыми:
+ * чёрный фон и группы-карточки поверх него, разделители с отступом слева до
+ * начала текста, шкала шрифтов с фиксированными ступенями и один акцентный
+ * цвет на всё приложение. Ничего лишнего: цветом выделяется только то, что
+ * несёт смысл, — состояние подключения и активные переключатели.
+ *
+ * От себя оставлен спектр из логотипа: он появляется единственный раз, в кольце
+ * вокруг кнопки подключения, и служит подписью приложения.
  */
-object Prism {
-    val Background = Color(0xFF080B14)
-    val Surface = Color(0xFF10151F)
-    val SurfaceHigh = Color(0xFF161C29)
-    val Outline = Color(0xFF232B3D)
+object Palette {
+    /** Фон под группами — у Apple в тёмной теме он именно чёрный */
+    val Background = Color(0xFF000000)
+    /** Карточка группы */
+    val Grouped = Color(0xFF1C1C1E)
+    /** Нажатая строка */
+    val GroupedPressed = Color(0xFF2C2C2E)
+    /** Разделитель внутри группы */
+    val Separator = Color(0xFF38383A)
 
-    val TextPrimary = Color(0xFFF2F5FA)
-    val TextSecondary = Color(0xFF8A93A8)
+    val Label = Color(0xFFFFFFFF)
+    val LabelSecondary = Color(0xFFEBEBF5).copy(alpha = 0.6f)
+    val LabelTertiary = Color(0xFFEBEBF5).copy(alpha = 0.3f)
 
-    val Accent = Color(0xFF6B8CFF)
-    val Success = Color(0xFF3FD68C)
-    val Warning = Color(0xFFFFB454)
-    val Danger = Color(0xFFFF5A6E)
+    val Blue = Color(0xFF0A84FF)
+    val Green = Color(0xFF30D158)
+    val Red = Color(0xFFFF453A)
+    val Orange = Color(0xFFFF9F0A)
+    val Fill = Color(0xFF787880).copy(alpha = 0.36f)
 
-    /** Спектр из логотипа: используется в градиенте кольца и метках протоколов */
+    /** Спектр из логотипа: только кольцо подключения */
     val Spectrum = listOf(
-        Color(0xFFFF5A6E),
-        Color(0xFFFFA24B),
-        Color(0xFFFFD84B),
-        Color(0xFF3FD68C),
-        Color(0xFF4BD6E5),
-        Color(0xFF6B8CFF),
-        Color(0xFFA56BFF)
+        Color(0xFFFF453A),
+        Color(0xFFFF9F0A),
+        Color(0xFFFFD60A),
+        Color(0xFF30D158),
+        Color(0xFF40C8E0),
+        Color(0xFF0A84FF),
+        Color(0xFFBF5AF2)
     )
 
-    /** Цвет метки по протоколу — список должен читаться с одного взгляда */
-    fun colorFor(type: String): Color = when (type) {
-        "vless" -> Color(0xFFA56BFF)
-        "vmess" -> Color(0xFF6B8CFF)
-        "trojan" -> Color(0xFFFF5A6E)
-        "shadowsocks" -> Color(0xFF3FD68C)
-        "hysteria2", "hysteria" -> Color(0xFFFFA24B)
-        "tuic" -> Color(0xFF4BD6E5)
-        "wireguard" -> Color(0xFFFF8FB1)
-        else -> TextSecondary
+    /** Цвет метки по протоколу */
+    fun protocol(type: String): Color = when (type) {
+        "vless" -> Color(0xFFBF5AF2)
+        "vmess" -> Blue
+        "trojan" -> Red
+        "shadowsocks" -> Green
+        "hysteria2", "hysteria" -> Orange
+        "tuic" -> Color(0xFF40C8E0)
+        "wireguard" -> Color(0xFFFF6482)
+        else -> LabelSecondary
     }
 }
 
+/** Шкала шрифтов iOS: ступени фиксированы, промежуточных значений не бывает */
+object AppleType {
+    val LargeTitle = TextStyle(fontSize = 34.sp, lineHeight = 41.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.37.sp)
+    val Title2 = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.Bold)
+    val Title3 = TextStyle(fontSize = 20.sp, lineHeight = 25.sp, fontWeight = FontWeight.SemiBold)
+    val Headline = TextStyle(fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold)
+    val Body = TextStyle(fontSize = 17.sp, lineHeight = 22.sp)
+    val Callout = TextStyle(fontSize = 16.sp, lineHeight = 21.sp)
+    val Subheadline = TextStyle(fontSize = 15.sp, lineHeight = 20.sp)
+    val Footnote = TextStyle(fontSize = 13.sp, lineHeight = 18.sp)
+    val Caption = TextStyle(fontSize = 12.sp, lineHeight = 16.sp)
+}
+
 private val PrismTypography = Typography(
-    displayLarge = TextStyle(fontSize = 44.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1).sp),
-    titleLarge = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
-    titleMedium = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
-    bodyMedium = TextStyle(fontSize = 15.sp),
-    bodySmall = TextStyle(fontSize = 13.sp),
-    labelSmall = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.5.sp)
+    displayLarge = AppleType.LargeTitle,
+    titleLarge = AppleType.Title2,
+    titleMedium = AppleType.Headline,
+    bodyLarge = AppleType.Body,
+    bodyMedium = AppleType.Callout,
+    bodySmall = AppleType.Footnote,
+    labelSmall = AppleType.Caption
 )
 
 @Composable
 fun PrismTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
-            primary = Prism.Accent,
+            primary = Palette.Blue,
             onPrimary = Color.White,
-            background = Prism.Background,
-            onBackground = Prism.TextPrimary,
-            surface = Prism.Surface,
-            onSurface = Prism.TextPrimary,
-            surfaceVariant = Prism.SurfaceHigh,
-            onSurfaceVariant = Prism.TextSecondary,
-            outline = Prism.Outline,
-            error = Prism.Danger
+            background = Palette.Background,
+            onBackground = Palette.Label,
+            surface = Palette.Grouped,
+            onSurface = Palette.Label,
+            surfaceVariant = Palette.GroupedPressed,
+            onSurfaceVariant = Palette.LabelSecondary,
+            outline = Palette.Separator,
+            error = Palette.Red
         ),
         typography = PrismTypography,
         content = content
