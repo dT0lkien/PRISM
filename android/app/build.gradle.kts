@@ -48,6 +48,19 @@ android {
     }
 }
 
+// Правила маршрутизации берутся из общего каталога resources/rules, а не
+// копируются в android/: 43 файла лежали бы в git дважды и разъезжались бы
+// с Windows-сборкой. Все вместе они весят 350 КБ.
+val rulesAssets = layout.buildDirectory.dir("generated/rulesAssets")
+
+val copyRules by tasks.registering(Copy::class) {
+    from(rootProject.file("../resources/rules")) { include("*.srs") }
+    into(rulesAssets.map { it.dir("rules") })
+}
+
+android.sourceSets["main"].assets.srcDir(rulesAssets)
+tasks.named("preBuild") { dependsOn(copyRules) }
+
 dependencies {
     // Ядро sing-box, собранное скриптом scripts/build-libbox-android.sh.
     // В git не хранится: около ста мегабайт на архитектуру.

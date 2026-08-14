@@ -141,7 +141,8 @@ class PrismCore private constructor(
     suspend fun configJson(
         nodes: List<ServerNode>,
         activeNodeId: String?,
-        cachePath: String
+        cachePath: String,
+        rulesDir: String
     ): String {
         val settings = defaultSettings()
         val presets = JSONArray(defaultEnabledPresets())
@@ -157,7 +158,7 @@ class PrismCore private constructor(
               appRules: [],
               customRules: [],
               enabledPresets: $presets,
-              rulesDir: '',
+              rulesDir: ${quote(rulesDir)},
               cachePath: ${quote(cachePath)},
               clashSecret: 'prism'
             })

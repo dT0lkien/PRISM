@@ -2057,23 +2057,29 @@ function buildConfig(ctx              )       {
   outbounds.push({ type: 'direct', tag: TAG_DIRECT })
 
   /* ── rule_set (только реально задействованные) ── */
+  // Правила берутся из файлов, если каталог с ними задан, и скачиваются иначе.
+  // Это не про платформу: .srs весят вместе 350 КБ, и класть их в приложение
+  // выгоднее везде, где это возможно. Ядро скачивает удалённые правила при
+  // старте и все сразу — то есть без сети туннель не поднимется вовсе, а через
+  // прокси возникает и вовсе замкнутый круг: чтобы включить прокси, нужен прокси.
+  const localRules = ctx.rulesDir.trim().length > 0
   const ruleSetDefs = [...usedRuleSets].map((tag) =>
-    isMobile
+    localRules
       ? {
-          type: 'remote',
-          tag,
-          format: 'binary',
-          url: ruleSetUrl(tag),
-          // Через прокси, а не напрямую: raw.githubusercontent.com у многих
-          // провайдеров закрыт, и напрямую правила просто не приедут
-          download_detour: TAG_PROXY,
-          update_interval: '7d'
-        }
-      : {
           type: 'local',
           tag,
           format: 'binary',
           path: joinPath(ctx.rulesDir, `${tag}.srs`)
+        }
+      : {
+          type: 'remote',
+          tag,
+          format: 'binary',
+          url: ruleSetUrl(tag),
+          // Напрямую, а не через прокси: скачивание правил не должно зависеть
+          // от туннеля, который без этих же правил не запустится
+          download_detour: TAG_DIRECT,
+          update_interval: '7d'
         }
   )
 

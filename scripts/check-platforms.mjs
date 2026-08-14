@@ -70,8 +70,9 @@ const parsed = JSON.parse(nodesJson)
 check('все ссылки разобраны', parsed.every(Boolean), `${parsed.filter(Boolean).length} из ${LINKS.length}`)
 check('кириллица и base64 живы', parsed[1]?.name === 'VMess WS')
 
-const build = (platform) => {
+const build = (platform, rulesDir = join(ROOT, 'resources', 'rules')) => {
   ctx.__platform = platform
+  ctx.__rulesDir = rulesDir
   return JSON.parse(
     vm.runInContext(
       `JSON.stringify(PrismShared.buildConfig({
@@ -82,7 +83,7 @@ const build = (platform) => {
          customRules: [],
          enabledPresets: PrismShared.DEFAULT_ENABLED_PRESETS,
          platform: __platform,
-         rulesDir: ${JSON.stringify(join(ROOT, 'resources', 'rules'))},
+         rulesDir: __rulesDir,
          cachePath: '/tmp/prism-cache.db',
          clashSecret: 'secret'
        }))`,
@@ -92,7 +93,8 @@ const build = (platform) => {
 }
 
 const win = build(undefined) // без platform — поведение по умолчанию, как было всегда
-const ios = build('ios')
+// iOS собирается без каталога правил — там их пока не кладут в приложение
+const ios = build('ios', '')
 const android = build('android')
 
 /* ─────────── Windows-ветка ─────────── */
@@ -118,7 +120,7 @@ check('правил не осталось без условий', ios.route.rule
 check('правила подключены удалённо', iosSets.length > 0 && iosSets.every((r) => r.type === 'remote'), `${iosSets.length} шт.`)
 check('локальных путей не осталось', iosSets.every((r) => !('path' in r)))
 check('адреса ведут на апстрим', iosSets.every((r) => /^https:\/\/raw\.githubusercontent\.com\/SagerNet\//.test(r.url)))
-check('качаются через прокси', iosSets.every((r) => r.download_detour === 'proxy'))
+check('качаются напрямую, а не через прокси', iosSets.every((r) => r.download_detour === 'direct'))
 
 /* ─────────── платформы расходятся только там, где должны ─────────── */
 
@@ -132,8 +134,11 @@ check('experimental', JSON.stringify(win.experimental) === JSON.stringify(ios.ex
 
 /* ─────────── android совпадает с ios ─────────── */
 
-console.log('\n--- android собирается так же, как ios ---')
-check('конфиги совпадают побайтно', JSON.stringify(ios) === JSON.stringify(android))
+console.log('\n--- android отличается от ios только источником правил ---')
+const androidSets = android.route.rule_set
+check('на android правила локальные', androidSets.every((r) => r.type === 'local'), `${androidSets.length} шт.`)
+const withoutSets = (c) => JSON.stringify({ ...c, route: { ...c.route, rule_set: null } })
+check('всё остальное совпадает', withoutSets(ios) === withoutSets(android))
 
 /* ─────────── подписки ─────────── */
 

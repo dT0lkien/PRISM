@@ -26,8 +26,20 @@
             </intent-filter>
         </activity>
 
-        <!-- Туннель появится здесь следующим шагом. Разрешение BIND_VPN_SERVICE
-             выдаёт система: оно защищает от подмены туннеля чужим приложением. -->
+        <!-- Разрешение BIND_VPN_SERVICE выдаёт система: оно защищает от того,
+             чтобы чужое приложение подменило собой туннель -->
+        <service
+            android:name=".TunnelService"
+            android:exported="false"
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:foregroundServiceType="specialUse">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="VPN tunnel" />
+        </service>
 
     </application>
 </manifest>

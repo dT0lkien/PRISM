@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Оформление задаёт Compose, здесь нужен лишь базовый стиль без панели заголовка -->
+<!-- Оформление задаёт Compose. Здесь важен только фон окна: он виден на
+     системной заставке до первого кадра, и светлый давал вспышку перед
+     тёмным экраном приложения. -->
 <resources>
-    <style name="Theme.Prism" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Prism" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#080B14</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
 </resources>

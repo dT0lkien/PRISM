@@ -6,7 +6,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import java.net.HttpURLConnection
 import java.net.URL
+import android.content.Intent
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.getValue
@@ -14,6 +16,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import org.json.JSONArray
 import org.json.JSONObject
+
+/** Состояние туннеля для интерфейса */
+enum class TunnelState { Off, Connecting, On, Failed }
 
 /**
  * Состояние приложения: список узлов, выбранный узел, доступ к общему ядру.
@@ -149,12 +154,93 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         """.trimIndent()
     )
 
+    // MARK: - Туннель
+
+    var tunnelState by mutableStateOf(TunnelState.Off)
+        private set
+    /** Момент подключения — от него считается время в эфире */
+    var connectedAt by mutableStateOf<Long?>(null)
+        private set
+
+    /**
+     * Готовит конфиг и запускает службу.
+     *
+     * Разрешение на туннель спрашивает система, и делает это только у Activity,
+     * поэтому запрос приходит снаружи: экран показывает системный диалог и
+     * вызывает этот метод, когда пользователь согласился.
+     */
+    fun connect() = viewModelScope.launch {
+        if (nodes.isEmpty()) {
+            status = "Сначала добавьте сервер"
+            return@launch
+        }
+        tunnelState = TunnelState.Connecting
+        status = null
+        try {
+            TunnelStore.writeConfig(getApplication(), configJson())
+        } catch (e: Throwable) {
+            tunnelState = TunnelState.Failed
+            status = e.message ?: "Не удалось собрать конфиг"
+            return@launch
+        }
+
+        val context = getApplication<Application>()
+        context.startForegroundService(
+            Intent(context, TunnelService::class.java).setAction(TunnelService.ACTION_START)
+        )
+
+        // Служба поднимается не мгновенно: ядру нужно прочитать конфиг и открыть
+        // туннель. Ждём результата, а не показываем «подключено» авансом.
+        repeat(40) {
+            delay(250)
+            if (TunnelService.isRunning) {
+                tunnelState = TunnelState.On
+                connectedAt = System.currentTimeMillis()
+                return@launch
+            }
+            TunnelService.lastError?.let {
+                tunnelState = TunnelState.Failed
+                status = it
+                return@launch
+            }
+        }
+        tunnelState = TunnelState.Failed
+        status = "Туннель не поднялся за 10 секунд"
+    }
+
+    fun disconnect() = viewModelScope.launch {
+        val context = getApplication<Application>()
+        context.startService(
+            Intent(context, TunnelService::class.java).setAction(TunnelService.ACTION_STOP)
+        )
+        repeat(20) {
+            delay(150)
+            if (!TunnelService.isRunning) return@repeat
+        }
+        tunnelState = TunnelState.Off
+        connectedAt = null
+    }
+
+    /** Служба живёт дольше экрана, поэтому при возврате состояние сверяется */
+    fun syncTunnelState() {
+        if (TunnelService.isRunning && tunnelState != TunnelState.On) {
+            tunnelState = TunnelState.On
+            if (connectedAt == null) connectedAt = System.currentTimeMillis()
+        } else if (!TunnelService.isRunning && tunnelState == TunnelState.On) {
+            tunnelState = TunnelState.Off
+            connectedAt = null
+        }
+    }
+
     // MARK: - Конфиг
 
     suspend fun configJson(): String {
         val core = core ?: throw IllegalStateException("Общее ядро не загружено")
-        val cache = getApplication<Application>().filesDir.resolve("cache.db").absolutePath
-        return core.configJson(nodes, activeNodeId, cache)
+        val context = getApplication<Application>()
+        val cache = context.filesDir.resolve("cache.db").absolutePath
+        // Правила распаковываются из ресурсов: ядру нужны файлы на диске
+        val rules = withContext(Dispatchers.IO) { TunnelStore.rulesDir(context) }
+        return core.configJson(nodes, activeNodeId, cache, rules)
     }
 
     // MARK: - Хранение
