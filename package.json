@@ -11,7 +11,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "build:shared": "node scripts/build-shared-js.mjs",
+    "build:shared": "node scripts/build-shared-js.mjs && node scripts/build-shared-js.mjs --out=android/app/src/main/assets/shared.js",
     "test:platforms": "node scripts/build-shared-js.mjs --check && node scripts/check-platforms.mjs",
     "test": "node scripts/run-validate.mjs && node scripts/run-e2e.mjs && npm run test:platforms",
     "icons": "node scripts/make-icons.mjs",

@@ -93,6 +93,7 @@ const build = (platform) => {
 
 const win = build(undefined) // без platform — поведение по умолчанию, как было всегда
 const ios = build('ios')
+const android = build('android')
 
 /* ─────────── Windows-ветка ─────────── */
 
@@ -128,6 +129,11 @@ check('dns', JSON.stringify(win.dns) === JSON.stringify(ios.dns))
 check('route.rules', JSON.stringify(withoutProc(win)) === JSON.stringify(withoutProc(ios)))
 check('набор правил тот же', JSON.stringify(winSets.map((r) => r.tag)) === JSON.stringify(iosSets.map((r) => r.tag)))
 check('experimental', JSON.stringify(win.experimental) === JSON.stringify(ios.experimental))
+
+/* ─────────── android совпадает с ios ─────────── */
+
+console.log('\n--- android собирается так же, как ios ---')
+check('конфиги совпадают побайтно', JSON.stringify(ios) === JSON.stringify(android))
 
 /* ─────────── подписки ─────────── */
 

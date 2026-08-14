@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Оформление задаёт Compose, здесь нужен лишь базовый стиль без панели заголовка -->
+<resources>
+    <style name="Theme.Prism" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

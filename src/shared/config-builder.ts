@@ -7,10 +7,11 @@ import { RULE_SET_TAGS, ruleSetUrl } from './rulesets'
 
 /** Платформа, под которую собирается конфиг.
 
-    Отличий три, и все вынуждены устройством iOS: туннель там поднимает
-    NetworkExtension, маршрутизации по процессам не существует, а файлов правил
-    рядом с приложением нет. Всё остальное у платформ общее. */
-export type ConfigPlatform = 'windows' | 'ios'
+    Отличий три, и все вынуждены устройством мобильных систем: туннель поднимает
+    сама система (NetworkExtension на iOS, VpnService на Android), маршрутизации
+    по процессам не существует, а файлов правил рядом с приложением нет.
+    Всё остальное у платформ общее, поэтому ios и android ведут себя одинаково. */
+export type ConfigPlatform = 'windows' | 'ios' | 'android'
 
 export const TAG_PROXY = 'proxy'
 export const TAG_DIRECT = 'direct'
@@ -25,7 +26,7 @@ export interface BuildContext {
   enabledPresets: string[]
   /** По умолчанию windows — чтобы существующие вызовы вели себя как раньше */
   platform?: ConfigPlatform
-  /** Каталог с .srs файлами. На iOS не используется: правила там remote */
+  /** Каталог с .srs файлами. На мобильных не используется: правила там remote */
   rulesDir: string
   /** Файл кэша (fakeip / результаты urltest) */
   cachePath: string
@@ -49,7 +50,7 @@ function tagFor(action: RuleAction): string | undefined {
 
 /** Matcher[] → поля правила sing-box. null если правило пустое.
 
-    skipProcess выбрасывает условия по процессам — на iOS их не существует.
+    skipProcess выбрасывает условия по процессам — на мобильных их не существует.
     Правило при этом может остаться без единого условия; тогда функция вернёт
     null и вызывающий его отбросит. Это принципиально: правило, потерявшее
     единственное условие, совпадало бы со всем трафиком подряд. */
@@ -158,7 +159,7 @@ export function parseDnsServer(raw: string, tag: string, detour?: string): Json 
 
 export function buildConfig(ctx: BuildContext): Json {
   const { settings: st } = ctx
-  const isIos = ctx.platform === 'ios'
+  const isMobile = ctx.platform === 'ios' || ctx.platform === 'android'
   const usedRuleSets = new Set<string>()
   const routeRules: Json[] = []
 
@@ -184,11 +185,11 @@ export function buildConfig(ctx: BuildContext): Json {
   }
 
   /* ── 3. Правила по приложениям (высший пользовательский приоритет) ──
-     На iOS пропускаются целиком: process_name там неприменим — система не даёт
-     туннелю узнать, какому приложению принадлежит трафик. Раздельная
-     маршрутизация по приложениям на iOS существует только как per-app VPN
-     под управлением MDM и к обычной установке отношения не имеет. */
-  if (!isIos) {
+     На мобильных пропускаются целиком: process_name там неприменим — система не
+     даёт туннелю узнать, какому приложению принадлежит трафик. На iOS раздельная
+     маршрутизация существует только как per-app VPN под управлением MDM,
+     на Android — через отдельный механизм VpnService, а не через конфиг ядра. */
+  if (!isMobile) {
     const byAction: Record<RuleAction, string[]> = { proxy: [], direct: [], block: [] }
     for (const a of ctx.appRules) {
       if (a.enabled && a.exe.trim()) byAction[a.action].push(a.exe.trim())
@@ -204,7 +205,7 @@ export function buildConfig(ctx: BuildContext): Json {
   /* ── 4. Пользовательские правила (в порядке списка) ── */
   for (const rule of ctx.customRules) {
     if (!rule.enabled) continue
-    const r = noteRuleSets(matchersToRule(rule.matchers, isIos))
+    const r = noteRuleSets(matchersToRule(rule.matchers, isMobile))
     if (!r) continue
     const tag = rule.outboundTag ?? tagFor(rule.action)
     routeRules.push(drop({ ...r, outbound: tag, action: tag ? undefined : 'reject' }))
@@ -217,7 +218,7 @@ export function buildConfig(ctx: BuildContext): Json {
   activePresets.sort((a, b) => order[a!.group] - order[b!.group])
   for (const p of activePresets) {
     for (const pr of p!.rules) {
-      const r = noteRuleSets(matchersToRule(pr.matchers, isIos))
+      const r = noteRuleSets(matchersToRule(pr.matchers, isMobile))
       if (!r) continue
       const tag = tagFor(pr.action)
       routeRules.push(drop({ ...r, outbound: tag, action: tag ? undefined : 'reject' }))
@@ -302,7 +303,7 @@ export function buildConfig(ctx: BuildContext): Json {
   const inbounds: Json[] = []
   // На iOS туннель существует всегда: режима «только системный прокси» там нет,
   // трафик приходит из NetworkExtension, и tun — точка его входа в ядро.
-  if (st.captureMode === 'tun' || isIos) {
+  if (st.captureMode === 'tun' || isMobile) {
     inbounds.push(
       drop({
         type: 'tun',
@@ -314,7 +315,7 @@ export function buildConfig(ctx: BuildContext): Json {
         // проходит везде и ядро молча его примет — тем важнее не оставлять его
         // на iOS: маршрутизацией там ведает NetworkExtension, и поле создавало бы
         // ложное впечатление, будто оно на что-то влияет
-        strict_route: isIos ? undefined : st.tun.strictRoute,
+        strict_route: isMobile ? undefined : st.tun.strictRoute,
         stack: st.tun.stack,
         // Эти процессы ядро вообще не заворачивает в TUN
         exclude_package: undefined
@@ -379,7 +380,7 @@ export function buildConfig(ctx: BuildContext): Json {
 
   /* ── rule_set (только реально задействованные) ── */
   const ruleSetDefs = [...usedRuleSets].map((tag) =>
-    isIos
+    isMobile
       ? {
           type: 'remote',
           tag,

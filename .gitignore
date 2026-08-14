@@ -11,6 +11,13 @@ resources/core/
 .swiftpm/
 ios/*.xcodeproj/
 ios/Libbox.xcframework/
+
+# Сборка Android. libbox.aar — 89 МБ на четыре архитектуры, собирается скриптом
+android/.gradle/
+android/build/
+android/app/build/
+android/app/libs/*.aar
+android/local.properties
 # Info.plist собирает xcodegen из project.yml — источник правды там
 ios/Prism/Info.plist
 ios/PrismTunnel/Info.plist
