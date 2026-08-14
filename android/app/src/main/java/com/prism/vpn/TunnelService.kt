@@ -195,12 +195,26 @@ class TunnelService : VpnService(), PlatformInterface, CommandServerHandler {
         manager.registerNetworkCallback(
             NetworkRequest.Builder()
                 .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                // NOT_VPN обязателен. Ядру нужен интерфейс, через который оно
+                // само выходит наружу, а после поднятия туннеля активной сетью
+                // становится сам туннель — и ядро начинает слать собственный
+                // трафик в свой же туннель, получая «no available network
+                // interface» на любой запрос, включая DNS.
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
                 .build(),
             callback
         )
         // Первое состояние отдаём сразу: ядру нужен интерфейс до первого запроса
-        manager.activeNetwork?.let { update(manager, it, listener) }
+        underlyingNetwork(manager)?.let { update(manager, it, listener) }
     }
+
+    /** Первая сеть с интернетом, которая не является туннелем */
+    private fun underlyingNetwork(manager: ConnectivityManager): Network? =
+        manager.allNetworks.firstOrNull { network ->
+            val caps = manager.getNetworkCapabilities(network) ?: return@firstOrNull false
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+        }
 
     private fun update(manager: ConnectivityManager, network: Network, listener: InterfaceUpdateListener) {
         val name = manager.getLinkProperties(network)?.interfaceName ?: return
@@ -209,7 +223,11 @@ class TunnelService : VpnService(), PlatformInterface, CommandServerHandler {
         val constrained = if (Build.VERSION.SDK_INT >= 34) {
             caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_CONGESTED) == false
         } else false
-        val index = runCatching { java.net.NetworkInterface.getByName(name).index }.getOrDefault(0)
+        // Индекс берём системным вызовом: java.net.NetworkInterface с Android 11
+        // приложениям перечислять интерфейсы не даёт, и там молча выходит ноль,
+        // от которого ядро остаётся без интерфейса вовсе
+        val index = runCatching { android.system.Os.if_nametoindex(name) }.getOrDefault(0)
+        android.util.Log.d("prism-tunnel", "интерфейс по умолчанию: $name index=$index")
         listener.updateDefaultInterface(name, index, metered, constrained)
     }
 
@@ -219,26 +237,39 @@ class TunnelService : VpnService(), PlatformInterface, CommandServerHandler {
         monitorCallback = null
     }
 
+    /**
+     * Список интерфейсов строится через ConnectivityManager, а не через
+     * java.net.NetworkInterface: перечислять интерфейсы напрямую Android с 11-й
+     * версии приложениям не разрешает, и список выходил пустым. Ядро при этом
+     * отвечало «no available network interface» на любой запрос, включая DNS,
+     * хотя интерфейс по умолчанию ему сообщался исправно.
+     */
     override fun getInterfaces(): NetworkInterfaceIterator {
-        val items = java.net.NetworkInterface.getNetworkInterfaces().toList().map { source ->
+        val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val items = manager.allNetworks.mapNotNull { network ->
+            val properties = manager.getLinkProperties(network) ?: return@mapNotNull null
+            val interfaceName = properties.interfaceName ?: return@mapNotNull null
+            val caps = manager.getNetworkCapabilities(network)
             io.nekohasekai.libbox.NetworkInterface().apply {
-                name = source.name
-                index = source.index
-                mtu = runCatching { source.mtu }.getOrDefault(1500)
-                // Ядро разбирает адреса как префиксы, поэтому длина сети
-                // обязательна: без «/64» разбор падает с «no '/'».
-                // Зону вида %dummy0 у link-local адресов тоже надо убрать —
-                // в префиксе она недопустима.
+                name = interfaceName
+                index = runCatching { android.system.Os.if_nametoindex(interfaceName) }.getOrDefault(0)
+                mtu = properties.mtu.takeIf { it > 0 } ?: 1500
+                metered = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == false
                 addresses = StringArray(
-                    source.interfaceAddresses.mapNotNull { entry ->
-                        val host = entry.address?.hostAddress ?: return@mapNotNull null
-                        "${host.substringBefore('%')}/${entry.networkPrefixLength}"
+                    properties.linkAddresses.mapNotNull { link ->
+                        val host = link.address?.hostAddress ?: return@mapNotNull null
+                        "${host.substringBefore('%')}/${link.prefixLength}"
                     }
                 )
             }
         }
+        android.util.Log.d(
+            "prism-tunnel",
+            "интерфейсов ядру: ${items.size} — " + items.joinToString { "${it.name}#${it.index}" }
+        )
         return InterfaceArray(items)
     }
+
 
     // MARK: - PlatformInterface: возможности платформы
 
