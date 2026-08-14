@@ -1,0 +1,95 @@
+# Описание проекта Xcode. Сам .xcodeproj не хранится в git — он генерируется:
+#   cd ios && xcodegen
+# Так набор файлов и настроек остаётся читаемым и не даёт конфликтов слияния.
+#
+# Перед генерацией нужен ios/Libbox.xcframework — ядро sing-box, собранное
+# скриптом scripts/build-libbox.sh. В git оно не хранится: сотни мегабайт.
+
+name: Prism
+
+options:
+  bundleIdPrefix: com.prism
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  minimumXcodeGenVersion: "2.40.0"
+
+packages:
+  PrismCore:
+    path: PrismCore
+
+targets:
+  Prism:
+    type: application
+    platform: iOS
+    sources:
+      - path: Prism
+    dependencies:
+      - package: PrismCore
+        product: PrismCore
+      - target: PrismTunnel
+        embed: true
+      # Фреймворк линкует расширение, а лежать он обязан в бандле приложения:
+      # у расширения своей папки Frameworks не бывает
+      - framework: Libbox.xcframework
+        embed: true
+        link: false
+    info:
+      path: Prism/Info.plist
+      properties:
+        CFBundleDisplayName: Prism
+        CFBundleShortVersionString: "1.1.0"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.prism.vpn
+        MARKETING_VERSION: "1.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.0"
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+        CODE_SIGN_ENTITLEMENTS: Prism/Prism.entitlements
+        # Каталог собирается скриптом scripts/make-ios-icon.swift из общего логотипа
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  # Провайдер туннеля. Отдельный процесс: именно ему система отдаёт пакеты,
+  # и именно в нём работает ядро sing-box.
+  PrismTunnel:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: PrismTunnel
+    dependencies:
+      - package: PrismCore
+        product: PrismCore
+      - framework: Libbox.xcframework
+        embed: false
+      # Сетевой стек Go на Darwin зовёт res_9_ninit и res_9_nsearch из libresolv;
+      # без этой библиотеки Libbox не слинкуется
+      - sdk: libresolv.tbd
+      # UIKit тянет код Chromium внутри реализации QUIC: ему нужны UIApplication
+      # и фоновые задачи. Расширению эти вызовы не пригодятся, но символы нужны.
+      - sdk: UIKit.framework
+    info:
+      path: PrismTunnel/Info.plist
+      properties:
+        CFBundleDisplayName: Prism Tunnel
+        CFBundleShortVersionString: "1.1.0"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.prism.vpn.tunnel
+        MARKETING_VERSION: "1.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.0"
+        CODE_SIGN_ENTITLEMENTS: PrismTunnel/PrismTunnel.entitlements
