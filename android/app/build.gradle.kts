@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -39,9 +41,37 @@ android {
         jvmTarget = "17"
     }
 
+    // Ключ подписи и пароли читаются из android/keystore.properties, которого
+    // нет в git. Хранить их в build.gradle означало бы выложить ключ вместе с
+    // исходниками, а подписанный им APK ставится поверх установленного.
+    val keystoreFile = rootProject.file("keystore.properties")
+    val keystore = Properties().apply {
+        if (keystoreFile.exists()) keystoreFile.inputStream().use(::load)
+    }
+
+    signingConfigs {
+        if (keystoreFile.exists()) {
+            create("release") {
+                storeFile = rootProject.file(keystore.getProperty("storeFile"))
+                storePassword = keystore.getProperty("storePassword")
+                keyAlias = keystore.getProperty("keyAlias")
+                keyPassword = keystore.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // Отладку выключает сам тип сборки, но для VPN это принципиально:
+            // с ней конфиг с ключами сервера читается любым процессом,
+            // подключившимся отладчиком
+            isDebuggable = false
+            // R8 оставлен выключенным намеренно: ядро sing-box вызывается через
+            // gomobile, и обрезка по отражению ломается молча, уже в работе
             isMinifyEnabled = false
+            if (keystoreFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

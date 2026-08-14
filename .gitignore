@@ -18,6 +18,9 @@ android/build/
 android/app/build/
 android/app/libs/*.aar
 android/local.properties
+# Ключ подписи и пароли к нему — не в репозиторий
+android/keystore.properties
+android/*.jks
 # Info.plist собирает xcodegen из project.yml — источник правды там
 ios/Prism/Info.plist
 ios/PrismTunnel/Info.plist
