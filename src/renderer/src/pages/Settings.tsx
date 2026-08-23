@@ -24,7 +24,8 @@ const THEMES: { id: ThemeName; label: string; hint: string }[] = [
   { id: 'light', label: 'Светлая', hint: 'Для яркого света' },
   { id: 'aero', label: 'Aero', hint: 'В духе XP и Vista' },
   { id: 'glass', label: 'Liquid Glass', hint: 'Матовое стекло' },
-  { id: 'win95', label: 'Windows 95', hint: 'Серый пластик и бирюза' }
+  { id: 'win95', label: 'Windows 95', hint: 'Серый пластик и бирюза' },
+  { id: 'frutiger', label: 'Frutiger Aero', hint: 'Небо, вода и мокрый глянец' }
 ]
 
 /** Маленький макет окна — понятнее, чем название темы в списке */
@@ -38,7 +39,15 @@ function ThemePreview({ id }: { id: ThemeName }): JSX.Element {
           ? { bg: 'linear-gradient(170deg,#a9cff0,#4f86c6)', bar: 'rgba(255,255,255,.65)', card: 'rgba(255,255,255,.8)', line: 'rgba(11,42,92,.3)', radius: 2 }
           : id === 'glass'
             ? { bg: 'radial-gradient(120% 100% at 15% 0%, #3b82f6 0%, #7c3aed 55%, #0a0f1c 100%)', bar: 'rgba(255,255,255,.14)', card: 'rgba(255,255,255,.16)', line: 'rgba(255,255,255,.3)', radius: 7 }
-            : { bg: '#008080', bar: 'linear-gradient(90deg,#000080,#1084d0)', card: '#c0c0c0', line: '#808080', radius: 0 }
+            : id === 'win95'
+              ? { bg: '#008080', bar: 'linear-gradient(90deg,#000080,#1084d0)', card: '#c0c0c0', line: '#808080', radius: 0 }
+              : {
+                  bg: 'radial-gradient(120% 70% at 50% 112%, #86e05a 0%, #46c06d 20%, rgba(70,192,109,0) 52%), linear-gradient(180deg,#d8f6ff,#8fddf7 40%,#46b6e8 100%)',
+                  bar: 'rgba(255,255,255,.7)',
+                  card: 'rgba(255,255,255,.82)',
+                  line: 'rgba(255,255,255,.95)',
+                  radius: 8
+                }
 
   const glossy = id === 'aero'
   return (
