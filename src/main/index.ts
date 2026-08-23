@@ -5,13 +5,14 @@ import { store, paths } from './store'
 import { core } from './core'
 import { updater } from './updater'
 import { registerIpc, setMainWindow, snapshot, wireCoreEvents } from './ipc'
-import { clearSystemProxy, isElevated, killStrayCores, IS_WIN } from './win'
+import { clearStaleProxy, clearSystemProxy, emergencyCleanupSync, isElevated, killStrayCores, IS_WIN } from './win'
 import { fetchSubscription, mergeSubscriptionNodes } from './subs'
 
 const isDev = !app.isPackaged
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
 let quitting = false
+let cleanedUp = false
 
 const startMinimized = process.argv.includes('--minimized')
 
@@ -55,6 +56,23 @@ function createWindow(): void {
   })
   win.on('maximize', () => win?.webContents.send('evt:maximize', true))
   win.on('unmaximize', () => win?.webContents.send('evt:maximize', false))
+
+  /* Windows завершает сеанс и промисов не ждёт: делаем всё синхронно и быстро,
+     иначе ядро переживёт выключение, а в реестре останется мёртвый прокси. */
+  win.on('session-end', () => {
+    quitting = true
+    cleanedUp = true
+    try {
+      emergencyCleanupSync(core.pid, store.get().savedProxy)
+    } catch {
+      /* всё равно выключаемся */
+    }
+    try {
+      store.save(true)
+    } catch {
+      /* всё равно выключаемся */
+    }
+  })
 
   win.on('close', (e) => {
     if (!quitting && store.get().settings.closeToTray) {
@@ -216,11 +234,38 @@ app.on('second-instance', () => {
 
 app.whenReady().then(async () => {
   store.load()
-  await killStrayCores(paths.runtimeConfig) // подчищаем хвосты после аварийного завершения
+
+  // Хвосты после аварийного завершения: Windows не убивает дочерние процессы
+  // вместе с родителем, поэтому ядро могло пережить падение или выключение
+  // и до сих пор держать TUN-адаптер — для пользователя это «пропал интернет».
+  const stray = await killStrayCores(paths.runtimeConfig, paths.core)
+  const staleProxy = await clearStaleProxy(store.get().settings.localPort, store.get().savedProxy)
 
   registerIpc()
   wireCoreEvents()
   createWindow()
+
+  if (stray.found) {
+    const msg =
+      stray.killed >= stray.found
+        ? `Найдено зависшее ядро после прошлого сеанса (${stray.found}) — остановлено`
+        : `Зависшее ядро найдено, но остановить не вышло: не хватает прав. Запустите Prism от администратора.`
+    setTimeout(() => {
+      win?.webContents.send('evt:toast', { kind: stray.killed >= stray.found ? 'warn' : 'error', text: msg })
+    }, 2500)
+  }
+  if (store.loadWarning) {
+    const text = store.loadWarning
+    setTimeout(() => win?.webContents.send('evt:toast', { kind: 'warn', text }), 2000)
+  }
+  if (staleProxy) {
+    setTimeout(() => {
+      win?.webContents.send('evt:toast', {
+        kind: 'warn',
+        text: 'В системе остался прокси от прошлого сеанса — снят, интернет должен вернуться'
+      })
+    }, 3000)
+  }
   createTray()
   scheduleSubscriptionUpdates()
 
@@ -253,7 +298,7 @@ app.on('before-quit', () => {
   quitting = true
 })
 
-let cleanedUp = false
+
 async function cleanup(): Promise<void> {
   if (cleanedUp) return
   cleanedUp = true

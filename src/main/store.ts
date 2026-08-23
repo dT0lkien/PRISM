@@ -1,6 +1,6 @@
 import { app } from 'electron'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
-import { join } from 'node:path'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
+import { basename, join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import type { AppRule, RoutingRule, ServerNode, Settings, Subscription } from '@shared/types'
 import { DEFAULT_ENABLED_PRESETS, DEFAULT_SETTINGS } from '@shared/defaults'
@@ -27,6 +27,10 @@ export const paths = {
   },
   get config() {
     return join(dataDir(), 'store.json')
+  },
+  /** Предыдущая удачная версия — страховка от порчи основного файла */
+  get configBackup() {
+    return join(dataDir(), 'store.backup.json')
   },
   get runtimeConfig() {
     return join(dataDir(), 'sing-box.json')
@@ -86,17 +90,41 @@ function reconcile(saved: Partial<StoreData>): StoreData {
 class Store {
   private data: StoreData = defaults()
   private saveTimer: NodeJS.Timeout | null = null
+  /** Что пошло не так при чтении — показываем пользователю, а не молчим */
+  loadWarning: string | null = null
 
   load(): StoreData {
+    if (!existsSync(dataDir())) mkdirSync(dataDir(), { recursive: true })
+    const read = (file: string): StoreData => reconcile(JSON.parse(readFileSync(file, 'utf8')))
+
     try {
-      if (!existsSync(dataDir())) mkdirSync(dataDir(), { recursive: true })
       if (existsSync(paths.config)) {
-        this.data = reconcile(JSON.parse(readFileSync(paths.config, 'utf8')))
+        this.data = read(paths.config)
+        return this.data
       }
     } catch (e) {
-      console.error('[store] не удалось прочитать конфиг, беру дефолты:', e)
-      this.data = defaults()
+      console.error('[store] основной файл настроек не читается:', e)
+      // Не затираем битый файл: сохраняем его — вдруг данные ещё можно достать
+      const dead = join(dataDir(), `store.corrupt-${Date.now()}.json`)
+      try {
+        renameSync(paths.config, dead)
+      } catch {
+        /* не вышло — переживём */
+      }
+      try {
+        if (existsSync(paths.configBackup)) {
+          this.data = read(paths.configBackup)
+          this.loadWarning = 'Файл настроек был повреждён — данные восстановлены из резервной копии'
+          this.save(true)
+          return this.data
+        }
+      } catch (e2) {
+        console.error('[store] резервная копия тоже не читается:', e2)
+      }
+      this.loadWarning = `Файл настроек был повреждён и восстановить его не вышло. Копия сохранена как ${basename(dead)}`
     }
+
+    this.data = defaults()
     return this.data
   }
 
@@ -128,8 +156,16 @@ class Store {
       this.saveTimer = null
       try {
         if (!existsSync(dataDir())) mkdirSync(dataDir(), { recursive: true })
+        const json = JSON.stringify(this.data, null, 2)
         const tmp = `${paths.config}.tmp`
-        writeFileSync(tmp, JSON.stringify(this.data, null, 2), 'utf8')
+        writeFileSync(tmp, json, 'utf8')
+        // Предыдущую удачную версию оставляем про запас — на случай,
+        // если основной файл переживёт неудачное выключение хуже нас
+        try {
+          if (existsSync(paths.config)) copyFileSync(paths.config, paths.configBackup)
+        } catch {
+          /* без резервной копии тоже живём */
+        }
         renameSync(tmp, paths.config)
       } catch (e) {
         console.error('[store] ошибка записи:', e)

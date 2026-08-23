@@ -257,3 +257,13 @@ export function timeOf(t: number): string {
     d.getSeconds()
   ).padStart(2, '0')}`
 }
+
+/** Склонение существительного после числа: 1 сервер, 2 сервера, 5 серверов */
+export function plural(n: number, one: string, few: string, many: string): string {
+  const a = Math.abs(n) % 100
+  if (a > 10 && a < 20) return many
+  const b = a % 10
+  if (b === 1) return one
+  if (b >= 2 && b <= 4) return few
+  return many
+}

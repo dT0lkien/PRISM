@@ -28,6 +28,11 @@ export class Core extends EventEmitter {
   private crashes = 0
   private crashTimer: NodeJS.Timeout | null = null
 
+  /** PID живого ядра — нужен аварийной уборке на выключении Windows */
+  get pid(): number | undefined {
+    return this.proc?.pid
+  }
+
   getState(): CoreState {
     return { ...this.state }
   }
@@ -70,7 +75,7 @@ export class Core extends EventEmitter {
     this.setState({ status: 'starting', error: undefined, elevated, captureMode: st.captureMode })
     this.log('Запуск ядра…')
 
-    await killStrayCores(paths.runtimeConfig)
+    await killStrayCores(paths.runtimeConfig, paths.core)
 
     // 1. Собираем и проверяем конфиг. Если один из серверов кривой — пробуем только активный.
     let configPath: string
@@ -242,7 +247,7 @@ export class Core extends EventEmitter {
       // Подстраховка: через 3 секунды добиваем
       await new Promise<void>((resolve) => {
         const t = setTimeout(async () => {
-          await killStrayCores(paths.runtimeConfig)
+          await killStrayCores(paths.runtimeConfig, paths.core)
           resolve()
         }, 3000)
         p.once('exit', () => {

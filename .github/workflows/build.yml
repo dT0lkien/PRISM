@@ -24,6 +24,8 @@ jobs:
         run: npm run typecheck
       - name: Генератор конфигов против настоящего sing-box
         run: node scripts/run-validate.mjs
+      - name: Живучесть хранилища
+        run: node scripts/run-store-test.mjs
       - name: Сквозной прогон трафика через ядро
         run: |
           set +e

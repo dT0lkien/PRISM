@@ -11,7 +11,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "test": "node scripts/run-validate.mjs && node scripts/run-e2e.mjs",
+    "test": "node scripts/run-validate.mjs && node scripts/run-store-test.mjs && node scripts/run-e2e.mjs",
     "icons": "node scripts/make-icons.mjs",
     "shots": "electron scripts/shoot.mjs",
     "pack:win": "npm run build && electron-builder --win --x64",

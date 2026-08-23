@@ -13,9 +13,9 @@ import {
   CalendarClock,
   AlertTriangle
 } from 'lucide-react'
-import { bytes, useStore } from '../store'
+import { bytes, plural, useStore } from '../store'
 import { Empty, Modal, Ping, Switch, spring } from '../ui'
-import type { ServerNode } from '@shared/types'
+import type { ServerNode, Subscription } from '@shared/types'
 
 export default function Servers(): JSX.Element {
   const { snap, setSnap, toast, core } = useStore()
@@ -25,6 +25,8 @@ export default function Servers(): JSX.Element {
   const [testing, setTesting] = useState(false)
   const [renaming, setRenaming] = useState<ServerNode | null>(null)
   const [busySub, setBusySub] = useState<string | null>(null)
+  const [killSub, setKillSub] = useState<Subscription | null>(null)
+  const [killNodes, setKillNodes] = useState<ServerNode[]>([])
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase()
@@ -48,6 +50,8 @@ export default function Servers(): JSX.Element {
       setTesting(false)
     }
   }
+
+  const killSubCount = killSub ? snap.nodes.filter((n) => n.subscriptionId === killSub.id).length : 0
 
   const remove = async (ids: string[]): Promise<void> => {
     setSnap(await window.prism.nodes.remove(ids))
@@ -124,11 +128,7 @@ export default function Servers(): JSX.Element {
                       <button className="btn icon sm" onClick={() => updateSub(s.id)} disabled={busySub === s.id} title="Обновить">
                         <RefreshCw size={14} className={busySub === s.id ? 'spin' : ''} />
                       </button>
-                      <button
-                        className="btn icon sm"
-                        title="Удалить подписку вместе с серверами"
-                        onClick={async () => setSnap(await window.prism.subs.remove(s.id, true))}
-                      >
+                      <button className="btn icon sm" title="Удалить подписку" onClick={() => setKillSub(s)}>
                         <Trash2 size={14} />
                       </button>
                     </div>
@@ -253,7 +253,7 @@ export default function Servers(): JSX.Element {
                     title="Удалить"
                     onClick={(e) => {
                       e.stopPropagation()
-                      void remove([n.id])
+                      setKillNodes([n])
                     }}
                   >
                     <Trash2 size={14} />
@@ -268,6 +268,92 @@ export default function Servers(): JSX.Element {
       <AddLinksModal open={addOpen} onClose={() => setAddOpen(false)} />
       <AddSubModal open={subOpen} onClose={() => setSubOpen(false)} />
       <RenameModal node={renaming} onClose={() => setRenaming(null)} />
+
+      <Modal
+        open={!!killSub}
+        onClose={() => setKillSub(null)}
+        title="Удалить подписку?"
+        icon={<AlertTriangle size={17} style={{ color: 'var(--warn)' }} />}
+        footer={
+          <>
+            <button className="btn" onClick={() => setKillSub(null)}>
+              Отмена
+            </button>
+            <button
+              className="btn"
+              onClick={async () => {
+                if (killSub) setSnap(await window.prism.subs.remove(killSub.id, false))
+                setKillSub(null)
+              }}
+            >
+              Оставить серверы
+            </button>
+            <button
+              className="btn danger"
+              onClick={async () => {
+                if (killSub) setSnap(await window.prism.subs.remove(killSub.id, true))
+                setKillSub(null)
+              }}
+            >
+              <Trash2 size={15} />
+              Удалить всё
+            </button>
+          </>
+        }
+      >
+        <p style={{ fontSize: 13.5 }}>
+          Будет удалена подписка <b>{killSub?.name}</b>
+          {killSubCount > 0 ? (
+            <>
+              {' '}
+              и <b>{killSubCount}</b> {plural(killSubCount, 'сервер', 'сервера', 'серверов')}, полученных по ней.
+            </>
+          ) : (
+            '.'
+          )}
+        </p>
+        <p className="mut" style={{ fontSize: 12.5 }}>
+          Вернуть их будет нельзя. Если серверы ещё нужны — нажмите «Оставить серверы»: исчезнет только сама
+          подписка, а список останется.
+        </p>
+      </Modal>
+
+      <Modal
+        open={!!killNodes.length}
+        onClose={() => setKillNodes([])}
+        title={killNodes.length > 1 ? 'Удалить серверы?' : 'Удалить сервер?'}
+        icon={<AlertTriangle size={17} style={{ color: 'var(--warn)' }} />}
+        footer={
+          <>
+            <button className="btn" onClick={() => setKillNodes([])}>
+              Отмена
+            </button>
+            <button
+              className="btn danger"
+              onClick={async () => {
+                await remove(killNodes.map((n) => n.id))
+                setKillNodes([])
+              }}
+            >
+              <Trash2 size={15} />
+              Удалить
+            </button>
+          </>
+        }
+      >
+        <p style={{ fontSize: 13.5 }}>
+          {killNodes.length === 1 ? (
+            <>
+              Сервер <b>{killNodes[0]?.name}</b> будет удалён из списка.
+            </>
+          ) : (
+            <>Будет удалено серверов: {killNodes.length}.</>
+          )}
+        </p>
+        <p className="mut" style={{ fontSize: 12.5 }}>
+          Если сервер пришёл из подписки, он вернётся при следующем её обновлении.
+        </p>
+      </Modal>
     </>
   )
 }

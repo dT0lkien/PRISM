@@ -3,7 +3,7 @@
    мягко — чтобы интерфейс можно было гонять в разработке. */
 
 import { app, nativeImage } from 'electron'
-import { execFile } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { promisify } from 'node:util'
 import { basename } from 'node:path'
 import type { DetectedApp } from '@shared/types'
@@ -94,7 +94,13 @@ async function regQuery(name: string): Promise<string> {
   }
 }
 
-export async function readSystemProxy(): Promise<{ enable: string; server: string; override: string }> {
+export interface ProxyState {
+  enable: string
+  server: string
+  override: string
+}
+
+export async function readSystemProxy(): Promise<ProxyState> {
   if (!IS_WIN) return { enable: '0', server: '', override: '' }
   const [enable, server, override] = await Promise.all([
     regQuery('ProxyEnable'),
@@ -127,7 +133,7 @@ export async function setSystemProxy(hostPort: string, bypass = DEFAULT_BYPASS):
   await refreshWinInet()
 }
 
-export async function clearSystemProxy(restore?: { enable: string; server: string; override: string }): Promise<void> {
+export async function clearSystemProxy(restore?: ProxyState): Promise<void> {
   if (!IS_WIN) return
   try {
     const wasOn = restore && /0x1|^1$/.test(restore.enable) && restore.server
@@ -261,21 +267,82 @@ export async function listRunningApps(): Promise<DetectedApp[]> {
  * Бьём только по своим: фильтр по пути к нашему конфигу, иначе положили бы
  * ядро соседнего клиента — Hiddify, Nekoray и прочие тоже носят sing-box.exe.
  */
-export async function killStrayCores(configPath: string): Promise<void> {
-  const needle = configPath.replace(/'/g, "''")
+export interface StrayResult {
+  found: number
+  killed: number
+}
+
+/**
+ * Снять зависшие процессы ядра, оставшиеся после аварийного завершения.
+ * Ищем строго свои: по пути к нашему бинарнику и по пути к нашему конфигу —
+ * иначе положили бы ядро соседнего клиента, Hiddify и Nekoray тоже носят
+ * sing-box.exe. ExecutablePath читается чаще, чем CommandLine: у процесса,
+ * запущенного с правами администратора, командную строку обычному
+ * пользователю не покажут.
+ */
+export async function killStrayCores(configPath: string, corePath?: string): Promise<StrayResult> {
+  const q = (v: string): string => v.replace(/'/g, "''")
   try {
     if (IS_WIN) {
-      await ps(
-        `Get-CimInstance Win32_Process -Filter "Name='sing-box.exe'" |` +
-          ` Where-Object { $_.CommandLine -like '*${needle}*' } |` +
-          ` ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
-        15000
+      const byPath = corePath ? ` -or $_.ExecutablePath -eq '${q(corePath)}'` : ''
+      const out = await ps(
+        `$p = @(Get-CimInstance Win32_Process -Filter "Name='sing-box.exe'" |` +
+          ` Where-Object { $_.CommandLine -like '*${q(configPath)}*'${byPath} });` +
+          ` $k = 0;` +
+          ` foreach ($x in $p) { try { Stop-Process -Id $x.ProcessId -Force -ErrorAction Stop; $k++ } catch {} }` +
+          ` "$($p.Count) $k"`,
+        20000
       )
-    } else {
-      await exec('/usr/bin/pkill', ['-f', configPath], { timeout: 10000 })
+      const [found, killed] = out.trim().split(/\s+/).map((n) => parseInt(n, 10) || 0)
+      return { found: found ?? 0, killed: killed ?? 0 }
     }
+    await exec('/usr/bin/pkill', ['-f', configPath], { timeout: 10000 })
+    return { found: 1, killed: 1 }
   } catch {
-    /* нечего убивать — это норма */
+    return { found: 0, killed: 0 }
+  }
+}
+
+/**
+ * Аварийная уборка при выключении Windows. Асинхронности здесь нет:
+ * на session-end система даёт считанные секунды и не ждёт промисов.
+ */
+export function emergencyCleanupSync(pid: number | undefined, restore?: ProxyState): void {
+  if (!IS_WIN) return
+  const run = (cmd: string, args: string[]): void => {
+    try {
+      execFileSync(cmd, args, { windowsHide: true, timeout: 4000, stdio: 'ignore' })
+    } catch {
+      /* уходим в любом случае */
+    }
+  }
+  if (pid) run('taskkill', ['/PID', String(pid), '/T', '/F'])
+  const wasOn = restore && /0x1|^1$/.test(restore.enable) && restore.server
+  if (wasOn) {
+    run('reg', ['add', INET_KEY, '/v', 'ProxyServer', '/t', 'REG_SZ', '/d', restore!.server, '/f'])
+    run('reg', ['add', INET_KEY, '/v', 'ProxyEnable', '/t', 'REG_DWORD', '/d', '1', '/f'])
+  } else {
+    run('reg', ['add', INET_KEY, '/v', 'ProxyEnable', '/t', 'REG_DWORD', '/d', '0', '/f'])
+  }
+}
+
+/**
+ * После аварийного завершения в реестре мог остаться наш прокси, которого
+ * уже никто не слушает — для пользователя это выглядит как «пропал интернет».
+ * Возвращает true, если пришлось вмешаться.
+ */
+export async function clearStaleProxy(localPort: number, saved?: ProxyState): Promise<boolean> {
+  if (!IS_WIN) return false
+  try {
+    const cur = await readSystemProxy()
+    const on = /0x1|^1$/.test(cur.enable)
+    if (!on || !cur.server.includes(`127.0.0.1:${localPort}`)) return false
+    // Если в «сохранённых» тоже мы — восстанавливать нечего, просто выключаем
+    const sane = saved && !saved.server.includes(`127.0.0.1:${localPort}`) ? saved : undefined
+    await clearSystemProxy(sane)
+    return true
+  } catch {
+    return false
   }
 }
 
