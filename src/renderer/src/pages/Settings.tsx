@@ -18,6 +18,7 @@ import type { AccentName, DnsStrategy, GraphStyle, ThemeName, TunStack } from '@
 import { ACCENTS, bytes, speed, useStore } from '../store'
 import { Modal, Segmented, Setting, Switch } from '../ui'
 import logo from '../assets/logo.png'
+import catPreview from '../assets/cats/c01.jpg'
 
 const THEMES: { id: ThemeName; label: string; hint: string }[] = [
   { id: 'dark', label: 'Тёмная', hint: 'По умолчанию' },
@@ -25,7 +26,8 @@ const THEMES: { id: ThemeName; label: string; hint: string }[] = [
   { id: 'aero', label: 'Aero', hint: 'В духе XP и Vista' },
   { id: 'glass', label: 'Liquid Glass', hint: 'Матовое стекло' },
   { id: 'win95', label: 'Windows 95', hint: 'Серый пластик и бирюза' },
-  { id: 'frutiger', label: 'Frutiger Aero', hint: 'Небо, вода и мокрый глянец' }
+  { id: 'frutiger', label: 'Frutiger Aero', hint: 'Небо, вода и мокрый глянец' },
+  { id: 'cats', label: 'Котики', hint: 'Розовая, с настоящими котятами' }
 ]
 
 /** Маленький макет окна — понятнее, чем название темы в списке */
@@ -41,17 +43,32 @@ function ThemePreview({ id }: { id: ThemeName }): JSX.Element {
             ? { bg: 'radial-gradient(120% 100% at 15% 0%, #3b82f6 0%, #7c3aed 55%, #0a0f1c 100%)', bar: 'rgba(255,255,255,.14)', card: 'rgba(255,255,255,.16)', line: 'rgba(255,255,255,.3)', radius: 7 }
             : id === 'win95'
               ? { bg: '#008080', bar: 'linear-gradient(90deg,#000080,#1084d0)', card: '#c0c0c0', line: '#808080', radius: 0 }
-              : {
-                  bg: 'radial-gradient(120% 70% at 50% 112%, #86e05a 0%, #46c06d 20%, rgba(70,192,109,0) 52%), linear-gradient(180deg,#d8f6ff,#8fddf7 40%,#46b6e8 100%)',
-                  bar: 'rgba(255,255,255,.7)',
-                  card: 'rgba(255,255,255,.82)',
-                  line: 'rgba(255,255,255,.95)',
-                  radius: 8
-                }
+              : id === 'frutiger'
+                ? {
+                    bg: 'radial-gradient(120% 70% at 50% 112%, #86e05a 0%, #46c06d 20%, rgba(70,192,109,0) 52%), linear-gradient(180deg,#d8f6ff,#8fddf7 40%,#46b6e8 100%)',
+                    bar: 'rgba(255,255,255,.7)',
+                    card: 'rgba(255,255,255,.82)',
+                    line: 'rgba(255,255,255,.95)',
+                    radius: 8
+                  }
+                : {
+                    bg: 'linear-gradient(165deg,#ffd9ea,#ffb0d4)',
+                    bar: 'rgba(255,255,255,.85)',
+                    card: 'rgba(255,255,255,.92)',
+                    line: 'rgba(255,158,203,.7)',
+                    radius: 9
+                  }
 
   const glossy = id === 'aero'
   return (
     <span className="theme-preview" style={{ background: skin.bg }}>
+      {id === 'cats' && (
+        <img
+          src={catPreview}
+          alt=""
+          style={{ position: 'absolute', left: 9, top: 20, width: 22, height: 22, borderRadius: '50%', objectFit: 'cover', zIndex: 1 }}
+        />
+      )}
       <span style={{ position: 'absolute', inset: 0, height: 11, background: skin.bar, borderBottom: `1px solid ${skin.line}` }} />
       <span
         style={{

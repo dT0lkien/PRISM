@@ -218,10 +218,17 @@ const ACCENTS: Record<string, [string, string]> = {
   lime: ['#a3e635', '#22d3ee']
 }
 
+/** У некоторых тем свой акцент по умолчанию — свой выбор пользователя всё равно главнее */
+const THEME_ACCENT: Partial<Record<Settings['theme'], [string, string]>> = {
+  cats: ['#ff7fbe', '#ffa8d5']
+}
+
 export function applyTheme(s: Settings): void {
   const root = document.documentElement
   root.dataset.theme = s.theme
-  const [a1, a2] = s.accentCustom ? [s.accentCustom.a, s.accentCustom.b] : (ACCENTS[s.accent] ?? ACCENTS.aurora)
+  const [a1, a2] = s.accentCustom
+    ? [s.accentCustom.a, s.accentCustom.b]
+    : (THEME_ACCENT[s.theme] ?? ACCENTS[s.accent] ?? ACCENTS.aurora)
   root.style.setProperty('--accent-1', a1)
   root.style.setProperty('--accent-2', a2)
 }

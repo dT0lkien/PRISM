@@ -33,8 +33,9 @@ VPN-клиент для Windows на ядре **sing-box** с упором на 
 - **Живой просмотр соединений**: какая программа, куда пошла и по какому правилу.
 - Импорт `vless`, `vmess`, `trojan`, `ss`, `hysteria2`, `tuic`, `anytls`, `socks`,
   подписок в виде списка, base64, **Clash YAML** и **sing-box JSON**.
-- Шесть тем оформления: тёмная, светлая, Aero в духе Windows XP и Vista,
-  Liquid Glass, Windows 95 и Frutiger Aero. Цвет акцента задаётся вручную.
+- Семь тем оформления: тёмная, светлая, Aero в духе Windows XP и Vista,
+  Liquid Glass, Windows 95, Frutiger Aero и «Котики» — розовая, с настоящими
+  фотографиями котят. Цвет акцента задаётся вручную.
 
 ## Про Discord
 

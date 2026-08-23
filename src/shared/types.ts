@@ -190,7 +190,7 @@ export interface UpdateState {
   checkedAt?: number
 }
 
-export type ThemeName = 'dark' | 'light' | 'aero' | 'glass' | 'win95' | 'frutiger'
+export type ThemeName = 'dark' | 'light' | 'aero' | 'glass' | 'win95' | 'frutiger' | 'cats'
 /** Как рисовать график трафика */
 export type GraphStyle = 'mirror' | 'area'
 export type AccentName = 'aurora' | 'violet' | 'ember' | 'ocean' | 'rose' | 'lime'

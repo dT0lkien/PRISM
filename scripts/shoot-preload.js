@@ -61,7 +61,7 @@ const settings = {
   minimizeToTray: true,
   closeToTray: true,
   startMinimized: false,
-  theme: 'dark',
+  theme: process.env.PRISM_THEME || 'dark',
   accent: 'aurora',
   graphStyle: process.env.PRISM_GRAPH || 'mirror',
   language: 'ru',

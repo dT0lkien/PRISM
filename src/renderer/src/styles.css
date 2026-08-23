@@ -2432,3 +2432,304 @@ textarea.input {
   color: #17566f;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.75);
 }
+
+/* ═══════════ «Котики» — розовая тема с настоящими котятами ═══════════
+   Фотографии из Викисклада, только CC0 и общественное достояние.
+   Котиков много и намеренно: это и была задача. */
+[data-theme='cats'] {
+  --bg: #ffe6f1;
+  --bg-2: #ffd2e6;
+  --panel: rgba(255, 255, 255, 0.86);
+  --panel-2: #ffffff;
+  --panel-3: rgba(255, 140, 190, 0.2);
+  --line: rgba(255, 158, 203, 0.55);
+  --line-2: rgba(226, 84, 148, 0.42);
+  --text: #4d1633;
+  --muted: #8d3462;
+  --dim: #b5658d;
+  --scrim: linear-gradient(170deg, rgba(255, 236, 245, 0.72), rgba(255, 214, 234, 0.8) 60%, rgba(255, 196, 224, 0.86));
+
+  --ok: #2fa35f;
+  --warn: #d98a00;
+  --err: #e04a6e;
+
+  --r-sm: 12px;
+  --r: 18px;
+  --r-lg: 26px;
+  --r-xl: 34px;
+
+  --shadow: 0 8px 22px rgba(214, 70, 130, 0.18);
+  --shadow-lg: 0 26px 60px rgba(214, 70, 130, 0.3);
+
+  /* След лапки — им размечаем фон и мелкие акценты */
+  --paw: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='%23ff8ec4'%3E%3Cellipse cx='8' cy='10' rx='3.1' ry='4.1'/%3E%3Cellipse cx='15' cy='7' rx='3.3' ry='4.3'/%3E%3Cellipse cx='22' cy='9' rx='3.1' ry='4.1'/%3E%3Cellipse cx='27' cy='16' rx='2.8' ry='3.5'/%3E%3Cpath d='M15 14c5 0 9 3.6 9 7.4 0 3.2-3 4.6-6 4.6-1.6 0-2.2-.6-3-.6s-1.4.6-3 .6c-3 0-6-1.4-6-4.6C6 17.6 10 14 15 14z'/%3E%3C/svg%3E");
+}
+
+/* ── фон ── */
+[data-theme='cats'] .aurora {
+  inset: 0;
+  opacity: 1;
+  filter: none;
+  background: linear-gradient(165deg, #ffd9ea 0%, #ffc2de 45%, #ffb0d4 100%);
+}
+[data-theme='cats'] .aurora span {
+  display: none;
+}
+/* Лапки, разбредающиеся по фону */
+[data-theme='cats'] .aurora::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--paw), var(--paw), var(--paw), var(--paw), var(--paw), var(--paw);
+  background-repeat: no-repeat;
+  background-size: 46px, 30px, 38px, 26px, 52px, 34px;
+  background-position: 6% 18%, 14% 40%, 9% 62%, 18% 80%, 88% 26%, 79% 58%;
+  opacity: 0.45;
+}
+
+/* ── карточки: белые, мягкие, с розовой каймой ── */
+[data-theme='cats'] .card,
+[data-theme='cats'] .modal,
+[data-theme='cats'] .app-row,
+[data-theme='cats'] .node,
+[data-theme='cats'] .rule,
+[data-theme='cats'] .preset,
+[data-theme='cats'] .theme-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1.5px solid rgba(255, 158, 203, 0.6);
+  box-shadow: 0 8px 22px rgba(214, 70, 130, 0.16);
+}
+
+[data-theme='cats'] .titlebar {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 226, 240, 0.7));
+  border-bottom: 1.5px solid rgba(255, 158, 203, 0.6);
+}
+[data-theme='cats'] .sidebar {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(255, 231, 243, 0.65));
+  border-right: 1.5px solid rgba(255, 158, 203, 0.6);
+}
+
+/* ── меню: у каждого пункта свой котёнок вместо значка ── */
+[data-theme='cats'] .nav-item svg {
+  display: none;
+}
+[data-theme='cats'] .nav-item::before {
+  content: '';
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 0 0 2px #fff, 0 2px 7px rgba(214, 70, 130, 0.35);
+}
+[data-theme='cats'] .nav-item:nth-of-type(1)::before { background-image: url('./assets/cats/c01.jpg'); }
+[data-theme='cats'] .nav-item:nth-of-type(2)::before { background-image: url('./assets/cats/c02.jpg'); }
+[data-theme='cats'] .nav-item:nth-of-type(3)::before { background-image: url('./assets/cats/c03.jpg'); }
+[data-theme='cats'] .nav-item:nth-of-type(4)::before { background-image: url('./assets/cats/c04.jpg'); }
+[data-theme='cats'] .nav-item:nth-of-type(5)::before { background-image: url('./assets/cats/c05.jpg'); }
+[data-theme='cats'] .nav-item:nth-of-type(6)::before { background-image: url('./assets/cats/c06.jpg'); }
+[data-theme='cats'] .nav-item:nth-of-type(7)::before { background-image: url('./assets/cats/c07.jpg'); }
+[data-theme='cats'] .nav-item.active::before {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px color-mix(in oklab, var(--accent-1) 70%, transparent);
+}
+
+/* ── кнопки и поля ── */
+[data-theme='cats'] .btn,
+[data-theme='cats'] .select,
+[data-theme='cats'] .input,
+[data-theme='cats'] .chip,
+[data-theme='cats'] .seg,
+[data-theme='cats'] .act-seg,
+[data-theme='cats'] .color-pick {
+  border-radius: 99px;
+  border-color: rgba(255, 158, 203, 0.7);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text);
+}
+[data-theme='cats'] textarea.input,
+[data-theme='cats'] .logs,
+[data-theme='cats'] .upd-notes {
+  border-radius: var(--r);
+}
+[data-theme='cats'] .btn:hover:not(:disabled) {
+  background: #fff2f8;
+  border-color: var(--accent-1);
+}
+[data-theme='cats'] .btn.primary {
+  background: linear-gradient(120deg, var(--accent-1), var(--accent-2));
+  border-color: transparent;
+  color: #fff;
+}
+[data-theme='cats'] .nav-item {
+  border-radius: 99px;
+}
+[data-theme='cats'] .seg button,
+[data-theme='cats'] .act-seg button,
+[data-theme='cats'] .seg .pill,
+[data-theme='cats'] .act-seg .pill,
+[data-theme='cats'] .nav-item .glow {
+  border-radius: 99px;
+}
+
+/* ── переключатели: мордочка котёнка вместо кружка ── */
+[data-theme='cats'] .switch {
+  width: 46px;
+  height: 26px;
+}
+[data-theme='cats'] .switch i {
+  width: 20px;
+  height: 20px;
+  background-image: url('./assets/cats/c08.jpg');
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 0 0 1.5px #fff;
+}
+[data-theme='cats'] .switch.on i {
+  transform: translateX(20px);
+}
+/* Ушки на бегунке */
+[data-theme='cats'] .switch i::before,
+[data-theme='cats'] .switch i::after {
+  content: '';
+  position: absolute;
+  top: -5px;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 7px solid #fff;
+}
+[data-theme='cats'] .switch i::before { left: 1px; transform: rotate(-16deg); }
+[data-theme='cats'] .switch i::after { right: 1px; transform: rotate(16deg); }
+
+/* ── кнопка подключения: большой котёнок ── */
+[data-theme='cats'] .power button {
+  background-image: url('./assets/cats/c09.jpg');
+  background-size: cover;
+  background-position: center;
+  border: 4px solid #fff;
+  box-shadow: 0 10px 30px rgba(214, 70, 130, 0.4);
+  color: #fff;
+}
+[data-theme='cats'] .power button svg {
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.55));
+}
+[data-theme='cats'] .power .ring {
+  border-color: rgba(255, 138, 190, 0.5);
+}
+
+[data-theme='cats'] .table th {
+  background: linear-gradient(180deg, #fff, #ffe9f3);
+  color: var(--muted);
+}
+[data-theme='cats'] .logs {
+  background: rgba(255, 255, 255, 0.92);
+}
+[data-theme='cats'] .section-title {
+  color: #a83a70;
+}
+
+/* ── котята в углах карточек и кошачьи ушки ── */
+/* Котёнок-водяной знак в углу карточки: лежит под текстом (z-index: -1),
+   поэтому виден всегда и при этом ничего не перекрывает */
+[data-theme='cats'] .card.pad {
+  isolation: isolate;
+}
+[data-theme='cats'] .card.pad::after {
+  content: '';
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 88px;
+  height: 88px;
+  z-index: -1;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+  background-image: url('./assets/cats/c10.jpg');
+  opacity: 0.24;
+  pointer-events: none;
+}
+[data-theme='cats'] .card.pad:nth-of-type(2n)::after {
+  background-image: url('./assets/cats/c11.jpg');
+}
+[data-theme='cats'] .card.pad:nth-of-type(3n)::after {
+  background-image: url('./assets/cats/c12.jpg');
+}
+/* Кошачьи ушки у карточек */
+[data-theme='cats'] .card.hero::before {
+  content: '';
+  position: absolute;
+  top: -17px;
+  left: 34px;
+  width: 0;
+  height: 0;
+  border-left: 17px solid transparent;
+  border-right: 17px solid transparent;
+  border-bottom: 26px solid rgba(255, 158, 203, 0.9);
+}
+[data-theme='cats'] .card.hero::after {
+  content: '';
+  position: absolute;
+  top: -17px;
+  left: 78px;
+  width: 0;
+  height: 0;
+  border-left: 17px solid transparent;
+  border-right: 17px solid transparent;
+  border-bottom: 26px solid rgba(255, 158, 203, 0.9);
+}
+
+/* ── обои из котят, котята в плитках, чипах и на кнопках ── */
+[data-theme='cats'] .aurora {
+  background:
+    linear-gradient(165deg, rgba(255, 217, 234, 0.82), rgba(255, 176, 212, 0.88)),
+    url('./assets/cats/c13.jpg') -60px -40px / 300px repeat,
+    linear-gradient(165deg, #ffd9ea, #ffb0d4);
+}
+[data-theme='cats'] .sidebar {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 231, 243, 0.86)),
+    url('./assets/cats/c05.jpg') center / 180px repeat;
+}
+[data-theme='cats'] .stat::after {
+  content: '';
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: url('./assets/cats/c06.jpg') center / cover;
+  box-shadow: 0 0 0 2px #fff;
+}
+[data-theme='cats'] .stat {
+  position: relative;
+}
+[data-theme='cats'] .btn.primary::before {
+  content: '';
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: url('./assets/cats/c07.jpg') center / cover;
+  box-shadow: 0 0 0 1.5px #fff;
+}
+[data-theme='cats'] .chip::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: url('./assets/cats/c04.jpg') center / cover;
+  flex-shrink: 0;
+}
+[data-theme='cats'] .section-title::before {
+  content: '';
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 7px;
+  vertical-align: -3px;
+  background: var(--paw) center / contain no-repeat;
+}
