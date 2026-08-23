@@ -6,6 +6,8 @@ const on = (name) => (cb) => {
   return () => {}
 }
 const fire = (name, v) => (cbs[name] ?? []).forEach((cb) => cb(v))
+// для тестов: возможность подать событие состояния снаружи
+window.__fireState = (v) => fire('state', v)
 
 const updateState = {
   status: 'available',
