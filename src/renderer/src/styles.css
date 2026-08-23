@@ -2638,10 +2638,16 @@ textarea.input {
 [data-theme='cats'] .switch i {
   width: 20px;
   height: 20px;
-  background-image: url('./assets/cats/c08.jpg');
-  background-size: cover;
-  background-position: center;
-  box-shadow: 0 0 0 1.5px #fff;
+  background: #fff;
+  -webkit-mask-image: var(--paw);
+  mask-image: var(--paw);
+  -webkit-mask-size: 88%;
+  mask-size: 88%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  box-shadow: none;
 }
 [data-theme='cats'] .switch.on i {
   transform: translateX(20px);
@@ -2724,13 +2730,13 @@ textarea.input {
   filter: drop-shadow(0 4px 8px rgba(190, 50, 110, 0.25));
   pointer-events: none;
 }
-/* Каждой панели — свой кот. Настоящих фото с прозрачным фоном под свободной
-   лицензией почти нет, поэтому в ход идут круглые фото-наклейки: разных котят
-   много, и на краю панели они читаются как выглядывающие. */
-[data-theme='cats'] .card.pad:nth-of-type(6n + 2)::after,
-[data-theme='cats'] .card.pad:nth-of-type(6n + 3)::after,
-[data-theme='cats'] .card.pad:nth-of-type(6n + 5)::after,
-[data-theme='cats'] .card.pad:nth-of-type(6n)::after {
+/* Карточки стоят через одну среди соседних блоков, поэтому цикл берём
+   нечётный: при чётном половина вариантов выпадала и соседи повторялись */
+[data-theme='cats'] .card.pad:nth-of-type(7n + 2)::after,
+[data-theme='cats'] .card.pad:nth-of-type(7n + 3)::after,
+[data-theme='cats'] .card.pad:nth-of-type(7n + 5)::after,
+[data-theme='cats'] .card.pad:nth-of-type(7n + 6)::after,
+[data-theme='cats'] .card.pad:nth-of-type(7n)::after {
   width: 58px;
   height: 58px;
   right: 30px;
@@ -2741,20 +2747,17 @@ textarea.input {
   box-shadow: 0 0 0 3px #fff, 0 4px 10px rgba(190, 50, 110, 0.3);
   filter: none;
 }
-[data-theme='cats'] .card.pad:nth-of-type(6n + 2)::after {
-  background-image: url('./assets/cats/c02.jpg');
+[data-theme='cats'] .card.pad:nth-of-type(7n + 2)::after { background-image: url('./assets/cats/c12.jpg'); }
+[data-theme='cats'] .card.pad:nth-of-type(7n + 3)::after { background-image: url('./assets/cats/c13.jpg'); }
+[data-theme='cats'] .card.pad:nth-of-type(7n + 5)::after { background-image: url('./assets/cats/c14.jpg'); }
+[data-theme='cats'] .card.pad:nth-of-type(7n + 6)::after { background-image: url('./assets/cats/c15.jpg'); }
+[data-theme='cats'] .card.pad:nth-of-type(7n)::after { background-image: url('./assets/cats/c16.jpg'); }
+/* На главной две колонки, и счёт nth-of-type в каждой свой — вторая карточка
+   правой колонки совпадала с карточкой левой. Разводим явно. */
+[data-theme='cats'] .dash > .col:last-child > .card.pad:nth-of-type(2)::after {
+  background-image: url('./assets/cats/c17.jpg');
 }
-[data-theme='cats'] .card.pad:nth-of-type(6n + 3)::after {
-  background-image: url('./assets/cats/c07.jpg');
-}
-[data-theme='cats'] .card.pad:nth-of-type(6n + 5)::after {
-  background-image: url('./assets/cats/c11.jpg');
-}
-[data-theme='cats'] .card.pad:nth-of-type(6n)::after {
-  background-image: url('./assets/cats/c13.jpg');
-}
-/* Панели 4 и 7 — кот, выглядывающий из коробки, и зеркальный сиамский */
-[data-theme='cats'] .card.pad:nth-of-type(6n + 4)::after {
+[data-theme='cats'] .card.pad:nth-of-type(7n + 4)::after {
   width: 88px;
   height: 58px;
   right: 26px;
@@ -2810,9 +2813,12 @@ textarea.input {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: url('./assets/cats/c06.jpg') center / cover;
+  background: url('./assets/cats/c08.jpg') center / cover;
   box-shadow: 0 0 0 2px #fff;
 }
+[data-theme='cats'] .stat:nth-child(2)::after { background-image: url('./assets/cats/c09.jpg'); }
+[data-theme='cats'] .stat:nth-child(3)::after { background-image: url('./assets/cats/c10.jpg'); }
+[data-theme='cats'] .stat:nth-child(4)::after { background-image: url('./assets/cats/c11.jpg'); }
 [data-theme='cats'] .stat {
   position: relative;
 }
@@ -2821,7 +2827,7 @@ textarea.input {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: url('./assets/cats/c07.jpg') center / cover;
+  background: url('./assets/cats/c18.jpg') center / cover;
   box-shadow: 0 0 0 1.5px #fff;
 }
 [data-theme='cats'] .chip::before {
@@ -2829,7 +2835,7 @@ textarea.input {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: url('./assets/cats/c04.jpg') center / cover;
+  background: var(--paw) center / contain no-repeat;
   flex-shrink: 0;
 }
 [data-theme='cats'] .section-title::before {

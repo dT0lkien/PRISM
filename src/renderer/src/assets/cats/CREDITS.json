@@ -43,10 +43,10 @@
  },
  {
   "file": "c07.jpg",
-  "title": "File:A seemingly innocent kitten (Pixabay).jpg",
-  "lic": "CC0",
-  "author": "ksphotofive",
-  "page": "https://commons.wikimedia.org/wiki/File:A_seemingly_innocent_kitten_(Pixabay).jpg"
+  "title": "File:Tortoise Nefertiti.jpg",
+  "lic": "Public domain",
+  "author": "Heleentje",
+  "page": "https://commons.wikimedia.org/wiki/File:Tortoise_Nefertiti.jpg"
  },
  {
   "file": "c08.jpg",
@@ -110,5 +110,40 @@
   "lic": "CC0",
   "author": "-",
   "page": "https://commons.wikimedia.org/wiki/File:Meow_of_a_Siamese_cat_-_freemaster2.wav"
+ },
+ {
+  "file": "c14.jpg",
+  "title": "File:Cat resting on a couch (Unsplash).jpg",
+  "lic": "CC0",
+  "author": "Erik-Jan Leusink ejleusink",
+  "page": "https://commons.wikimedia.org/wiki/File:Cat_resting_on_a_couch_(Unsplash).jpg"
+ },
+ {
+  "file": "c15.jpg",
+  "title": "File:Lolisa.jpg",
+  "lic": "CC0",
+  "author": "Bmoneil17",
+  "page": "https://commons.wikimedia.org/wiki/File:Lolisa.jpg"
+ },
+ {
+  "file": "c16.jpg",
+  "title": "File:Cat Lady (Unsplash).jpg",
+  "lic": "CC0",
+  "author": "Matheus Ferrero matheusferrero",
+  "page": "https://commons.wikimedia.org/wiki/File:Cat_Lady_(Unsplash).jpg"
+ },
+ {
+  "file": "c17.jpg",
+  "title": "File:Kitten in makeup box.jpg",
+  "lic": "CC0",
+  "author": "RobotBlanket",
+  "page": "https://commons.wikimedia.org/wiki/File:Kitten_in_makeup_box.jpg"
+ },
+ {
+  "file": "c18.jpg",
+  "title": "File:An European Shorthair tabby cat.jpg",
+  "lic": "CC0",
+  "author": "Gugalcrom123",
+  "page": "https://commons.wikimedia.org/wiki/File:An_European_Shorthair_tabby_cat.jpg"
  }
 ]
