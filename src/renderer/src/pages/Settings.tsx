@@ -119,7 +119,9 @@ function UpdateSection(): JSX.Element {
     <div className="setting stack" style={{ gap: 12 }}>
       <div className="row" style={{ gap: 12 }}>
         <span className={`upd-badge ${update.status}`}>
-          {update.status === 'ready' ? (
+          {update.status === 'installing' ? (
+            <RefreshCw size={18} className="spin" />
+          ) : update.status === 'ready' ? (
             <PackageCheck size={18} />
           ) : update.status === 'available' ? (
             <Download size={18} />
@@ -142,6 +144,8 @@ function UpdateSection(): JSX.Element {
                   ? `Загружаю версию ${update.version}`
                   : update.status === 'ready'
                     ? `Версия ${update.version} готова к установке`
+                    : update.status === 'installing'
+                      ? `Устанавливаю версию ${update.version}…`
                     : update.status === 'error'
                       ? 'Не удалось проверить обновления'
                       : update.status === 'unsupported'
@@ -154,8 +158,10 @@ function UpdateSection(): JSX.Element {
               : update.status === 'downloading'
                 ? `${bytes(update.transferred ?? 0)} из ${bytes(update.total ?? 0)} · ${speed(update.bytesPerSecond ?? 0)}`
                 : update.status === 'ready'
-                  ? 'Prism отключит туннель, поставит обновление и запустится заново'
-                  : checked}
+                  ? 'Prism отключит туннель, поставит обновление тихо и запустится заново'
+                  : update.status === 'installing'
+                    ? 'Окно закроется и откроется снова — установщик не появится'
+                    : checked}
           </span>
         </div>
 

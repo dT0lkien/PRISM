@@ -79,6 +79,7 @@ jobs:
           name: Prism-windows-x64
           path: |
             dist/*.exe
+            dist/*.blockmap
             dist/latest.yml
             dist/SHA256SUMS.txt
           retention-days: 30
@@ -92,5 +93,6 @@ jobs:
           generate_release_notes: true
           files: |
             dist/*.exe
+            dist/*.blockmap
             dist/latest.yml
             dist/SHA256SUMS.txt

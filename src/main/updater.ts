@@ -158,8 +158,10 @@ class Updater extends EventEmitter {
     } catch {
       /* всё равно ставим: установщик перезапишет файлы */
     }
-    // isSilent=false — установщик покажет прогресс, isForceRunAfter=true — запустит приложение
-    autoUpdater.quitAndInstall(false, true)
+    this.set({ status: 'installing' })
+    // Окно установщика пользователю не нужно: он уже нажал «Установить».
+    // isSilent=true — ставим молча, isForceRunAfter=true — сами и запустимся.
+    autoUpdater.quitAndInstall(true, true)
     return true
   }
 }

@@ -170,6 +170,7 @@ export type UpdateStatus =
   | 'available'
   | 'downloading'
   | 'ready'
+  | 'installing'
   | 'error'
   /** Портативная сборка и режим разработки обновлять себя не умеют */
   | 'unsupported'
