@@ -2499,16 +2499,16 @@ textarea.input {
   height: 275px;
   background: url('./assets/cats/cat-dance.png') center bottom / contain no-repeat;
   transform-origin: 50% 100%;
-  animation: cat-dance-mirror 0.87s ease-in-out infinite alternate;
+  animation: cat-wiggle 0.79s ease-in-out infinite alternate;
   filter: drop-shadow(0 8px 14px rgba(190, 50, 110, 0.3));
 }
 @keyframes cat-dance {
   from { transform: rotate(-12deg) translateY(0) scaleY(1); }
   to   { transform: rotate(12deg) translateY(-16px) scaleY(1.06); }
 }
-@keyframes cat-dance-mirror {
-  from { transform: scaleX(-1) rotate(-10deg) translateY(-12px); }
-  to   { transform: scaleX(-1) rotate(10deg) translateY(0); }
+@keyframes cat-wiggle {
+  from { transform: scaleX(-1) rotate(-14deg) translateY(-6px) scaleY(0.98); }
+  to   { transform: scaleX(-1) rotate(8deg) translateY(-20px) scaleY(1.05); }
 }
 
 /* Блёстки */
@@ -2716,14 +2716,51 @@ textarea.input {
 [data-theme='cats'] .card.pad::after {
   content: '';
   position: absolute;
-  right: 34px;
   bottom: 100%;
+  right: 34px;
   width: 44px;
   height: 68px;
   background: url('./assets/cats/cat-dance.png') center bottom / contain no-repeat;
   filter: drop-shadow(0 4px 8px rgba(190, 50, 110, 0.25));
   pointer-events: none;
 }
+/* Каждой панели — свой кот. Настоящих фото с прозрачным фоном под свободной
+   лицензией почти нет, поэтому в ход идут круглые фото-наклейки: разных котят
+   много, и на краю панели они читаются как выглядывающие. */
+[data-theme='cats'] .card.pad:nth-of-type(6n + 2)::after,
+[data-theme='cats'] .card.pad:nth-of-type(6n + 3)::after,
+[data-theme='cats'] .card.pad:nth-of-type(6n + 5)::after,
+[data-theme='cats'] .card.pad:nth-of-type(6n)::after {
+  width: 58px;
+  height: 58px;
+  right: 30px;
+  bottom: calc(100% - 24px);
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 0 0 3px #fff, 0 4px 10px rgba(190, 50, 110, 0.3);
+  filter: none;
+}
+[data-theme='cats'] .card.pad:nth-of-type(6n + 2)::after {
+  background-image: url('./assets/cats/c02.jpg');
+}
+[data-theme='cats'] .card.pad:nth-of-type(6n + 3)::after {
+  background-image: url('./assets/cats/c07.jpg');
+}
+[data-theme='cats'] .card.pad:nth-of-type(6n + 5)::after {
+  background-image: url('./assets/cats/c11.jpg');
+}
+[data-theme='cats'] .card.pad:nth-of-type(6n)::after {
+  background-image: url('./assets/cats/c13.jpg');
+}
+/* Панели 4 и 7 — кот, выглядывающий из коробки, и зеркальный сиамский */
+[data-theme='cats'] .card.pad:nth-of-type(6n + 4)::after {
+  width: 88px;
+  height: 58px;
+  right: 26px;
+  background-image: url('./assets/cats/cat-peek.png');
+}
+
 /* Кружевная оборка по нижнему краю */
 [data-theme='cats'] .card.pad::before,
 [data-theme='cats'] .card.hero::after {
