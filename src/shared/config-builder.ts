@@ -287,9 +287,7 @@ export function buildConfig(ctx: BuildContext): Json {
         mtu: st.tun.mtu,
         auto_route: st.tun.autoRoute,
         strict_route: st.tun.strictRoute,
-        stack: st.tun.stack,
-        // Эти процессы ядро вообще не заворачивает в TUN
-        exclude_package: undefined
+        stack: st.tun.stack
       })
     )
   }
@@ -409,20 +407,4 @@ export function deepMerge<T extends Json>(base: T, patch: Json): T {
     }
   }
   return out as T
-}
-
-/** Конфиг для быстрой проверки задержки одного узла */
-export function buildLatencyConfig(node: ServerNode, port: number, cachePath: string): Json {
-  return {
-    log: { level: 'error' },
-    inbounds: [{ type: 'mixed', tag: 'in', listen: '127.0.0.1', listen_port: port }],
-    outbounds: [{ ...node.outbound, tag: 'out' }, { type: 'direct', tag: 'direct' }],
-    route: {
-      rules: [{ action: 'sniff' }],
-      final: 'out',
-      default_domain_resolver: { server: 'dns-direct' }
-    },
-    dns: { servers: [{ type: 'udp', tag: 'dns-direct', server: '1.1.1.1', detour: 'direct' }] },
-    experimental: { cache_file: { enabled: false, path: cachePath } }
-  }
 }

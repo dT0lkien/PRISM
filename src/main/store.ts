@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import type { AppRule, RoutingRule, ServerNode, Settings, Subscription } from '@shared/types'
@@ -18,6 +18,16 @@ export interface StoreData {
   /** Сохранённые настройки системного прокси до нашего вмешательства */
   savedProxy?: { enable: string; server: string; override: string }
 }
+
+/* В store.json открытым текстом лежат пароли, UUID и ключи всех серверов
+   пользователя плюс clashSecret, а файл создавался с 0644 — то есть его мог
+   прочитать любой локальный пользователь. Честно: на Windows, а это целевая
+   платформа, POSIX-режимы почти не работают и защита держится на ACL профиля;
+   реальную пользу это даёт на macOS и Linux. Файлы чинятся сами (режим ставится
+   временному файлу, а renameSync переносит его вместе с inode), а вот уже
+   созданный каталог mkdirSync не перечиняет — там режим только для новых. */
+const FILE_MODE = 0o600
+const DIR_MODE = 0o700
 
 const dataDir = () => app.getPath('userData')
 
@@ -94,7 +104,7 @@ class Store {
   loadWarning: string | null = null
 
   load(): StoreData {
-    if (!existsSync(dataDir())) mkdirSync(dataDir(), { recursive: true })
+    if (!existsSync(dataDir())) mkdirSync(dataDir(), { recursive: true, mode: DIR_MODE })
     const read = (file: string): StoreData => reconcile(JSON.parse(readFileSync(file, 'utf8')))
 
     try {
@@ -108,6 +118,8 @@ class Store {
       const dead = join(dataDir(), `store.corrupt-${Date.now()}.json`)
       try {
         renameSync(paths.config, dead)
+        // В битой копии лежат те же секреты, что и в основном файле
+        chmodSync(dead, FILE_MODE)
       } catch {
         /* не вышло — переживём */
       }
@@ -155,14 +167,21 @@ class Store {
     const write = () => {
       this.saveTimer = null
       try {
-        if (!existsSync(dataDir())) mkdirSync(dataDir(), { recursive: true })
+        if (!existsSync(dataDir())) mkdirSync(dataDir(), { recursive: true, mode: DIR_MODE })
         const json = JSON.stringify(this.data, null, 2)
         const tmp = `${paths.config}.tmp`
-        writeFileSync(tmp, json, 'utf8')
+        /* Права ставим временному файлу: renameSync переносит inode вместе с
+           режимом, так что store.json получает 0600 и сам чинится у тех,
+           у кого он остался с 0644 от прошлых версий. */
+        writeFileSync(tmp, json, { encoding: 'utf8', mode: FILE_MODE })
         // Предыдущую удачную версию оставляем про запас — на случай,
         // если основной файл переживёт неудачное выключение хуже нас
         try {
-          if (existsSync(paths.config)) copyFileSync(paths.config, paths.configBackup)
+          if (existsSync(paths.config)) {
+            copyFileSync(paths.config, paths.configBackup)
+            // copyFileSync не трогает права уже существующего файла — ставим явно
+            chmodSync(paths.configBackup, FILE_MODE)
+          }
         } catch {
           /* без резервной копии тоже живём */
         }
