@@ -6,6 +6,31 @@ import type { ImportResult, NodeType, ServerNode, Subscription } from '@shared/t
 
 const UA = 'sing-box/1.13.15 (Prism)'
 
+/* Белый список типов outbound, которые разрешено брать из подписки в формате
+   sing-box JSON. Тут outbound переносится в конфиг ядра как есть (`...rest`),
+   поэтому недоверенный сервер подписки иначе прислал бы любой тип с любыми полями.
+   Опасен прежде всего `tor`: ядро запускает по полю `executable_path` внешний
+   бинарник с аргументами из `extra_args` — то есть выполнение произвольного кода
+   при старте ядра, а в TUN-режиме ядро идёт с правами администратора. Остальные
+   служебные типы (selector/urltest/direct/block/dns и т.п.) для узла бессмысленны.
+   URI- и Clash-парсеры собирают outbound из фиксированного набора полей, им список
+   не нужен — брешь только здесь. */
+const ALLOWED_OUTBOUND_TYPES = new Set<NodeType>([
+  'vless',
+  'vmess',
+  'trojan',
+  'shadowsocks',
+  'hysteria2',
+  'hysteria',
+  'tuic',
+  'anytls',
+  'wireguard',
+  'ssh',
+  'http',
+  'socks',
+  'shadowtls'
+])
+
 export interface FetchedSub {
   nodes: ServerNode[]
   userInfo?: Subscription['userInfo']
@@ -42,7 +67,7 @@ export function parseSubscriptionBody(body: string, subscriptionId?: string): Se
       const j = JSON.parse(text)
       const list: any[] = Array.isArray(j) ? j : (j.outbounds ?? [])
       for (const ob of list) {
-        if (!ob?.type || ['selector', 'urltest', 'direct', 'block', 'dns'].includes(ob.type)) continue
+        if (!ob?.type || !ALLOWED_OUTBOUND_TYPES.has(ob.type)) continue
         const { tag, ...rest } = ob
         nodes.push({
           id: uid(),
@@ -97,14 +122,60 @@ export function parseSubscriptionBody(body: string, subscriptionId?: string): Se
   return nodes
 }
 
+/* Потолок на размер тела подписки. Реальные списки — десятки-сотни килобайт,
+   так что 10 МБ это полсотни запасов, а не ограничение для честного сервера. */
+const MAX_BODY_BYTES = 10 * 1024 * 1024
+const TOO_BIG = 'Ответ подписки больше 10 МБ — это не похоже на список серверов'
+
+/* Читаем тело потоком и обрываем по счётчику: `res.text()` буферизует ответ
+   целиком, поэтому враждебный (или просто сломанный) сервер подписки укладывал
+   привилегированный main-процесс в OOM. Таймаут в 30 секунд от этого не спасает —
+   на быстром канале за это время приезжает более чем достаточно. Особенно важно,
+   что подписки обновляются сами раз в 12 часов: отказ воспроизводится без участия
+   пользователя, а падение main оставляет ядро с живым TUN-адаптером и мёртвый
+   прокси в реестре — ровно то, против чего написана вся «Уборка за собой». */
+async function readBodyCapped(res: Response): Promise<string> {
+  /* Content-Length может отсутствовать и может врать, поэтому он тут только
+     быстрый предварительный отсев — решает фактически прочитанное. */
+  const declared = Number(res.headers.get('content-length'))
+  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) throw new Error(TOO_BIG)
+  if (!res.body) return res.text()
+
+  const reader = res.body.getReader()
+  /* stream: true обязателен: иначе многобайтные символы на границе чанков
+     побьются, а в именах серверов регулярно попадаются кириллица и эмодзи. */
+  const decoder = new TextDecoder('utf-8')
+  let read = 0
+  let out = ''
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      read += value.byteLength
+      if (read > MAX_BODY_BYTES) throw new Error(TOO_BIG)
+      out += decoder.decode(value, { stream: true })
+    }
+  } finally {
+    /* Обрываем закачку, чтобы на превышении не тянуть остаток впустую. */
+    await reader.cancel().catch(() => {})
+  }
+  return out + decoder.decode()
+}
+
 export async function fetchSubscription(url: string, subscriptionId?: string): Promise<FetchedSub> {
   const res = await fetch(url, {
     headers: { 'User-Agent': UA, Accept: '*/*' },
     redirect: 'follow',
     signal: AbortSignal.timeout(30000)
   })
+  /* redirect: 'follow' уводит куда угодно, поэтому схему проверяем на итоговом
+     URL, а не на исходном. Дыры тут нет (file:// undici всё равно не резолвит),
+     это страховка на случай подписки, редиректящей на нестандартную схему. */
+  if (res.url && !/^https?:$/.test(new URL(res.url).protocol)) {
+    throw new Error('Подписка увела на не-HTTP адрес — так делать нельзя')
+  }
   if (!res.ok) throw new Error(`Сервер подписки ответил ${res.status} ${res.statusText}`)
-  const body = await res.text()
+  const body = await readBodyCapped(res)
   const nodes = parseSubscriptionBody(body, subscriptionId)
   if (!nodes.length) throw new Error('В ответе не нашлось ни одного сервера — проверьте ссылку')
   return { nodes, userInfo: parseUserInfo(res.headers.get('subscription-userinfo')) }

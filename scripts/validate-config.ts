@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process'
 import { writeFileSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { parseSubscriptionBody } from '../src/main/subs'
 import { buildConfig } from '../src/shared/config-builder'
 import { DEFAULT_SETTINGS, DEFAULT_ENABLED_PRESETS } from '../src/shared/defaults'
 import { parseLink, parsedToNode } from '../src/shared/parsers'
@@ -156,6 +157,54 @@ tally(
     },
     dns: { servers: [{ type: 'udp', tag: 'd', server: '1.1.1.1' }] }
   })
+)
+
+/* 5. Разбор подписки: белый список типов outbound.
+   Ветка sing-box JSON переносит outbound в конфиг ядра как есть, поэтому список
+   в subs.ts — единственное, что отделяет враждебный сервер подписки от запуска
+   произвольного бинарника: у типа `tor` ядро исполняет executable_path с
+   extra_args, а в TUN-режиме ядро работает с правами администратора. Конфиг с
+   таким outbound проходит `sing-box check`, так что проверками генератора выше
+   это не ловится — нужен отдельный тест на самом разборе. */
+console.log('\n▸ Разбор подписки')
+
+const expect = (name: string, ok: boolean, detail: string) => {
+  console.log(ok ? `  ✅ ${name}` : `  ❌ ${name}\n     получено: ${detail}`)
+  tally(ok)
+}
+
+const torOnly = parseSubscriptionBody(
+  JSON.stringify({
+    outbounds: [{ type: 'tor', tag: 'pwn', executable_path: '/usr/bin/touch', extra_args: ['/tmp/prism-pwned'] }]
+  })
+)
+expect('tor-outbound отброшен', torOnly.length === 0, `узлов ${torOnly.length}`)
+
+const legit = parseSubscriptionBody(
+  JSON.stringify({
+    outbounds: [
+      { type: 'vless', tag: 'Legit', server: 'example.com', server_port: 443, uuid: '11111111-2222-3333-4444-555555555555' }
+    ]
+  })
+)
+expect(
+  'легитимный vless принят',
+  legit.length === 1 && legit[0].type === 'vless' && legit[0].server === 'example.com',
+  `узлов ${legit.length}, type ${legit[0]?.type}, server ${legit[0]?.server}`
+)
+
+const mixed = parseSubscriptionBody(
+  JSON.stringify({
+    outbounds: [
+      { type: 'tor', tag: 'pwn', executable_path: '/usr/bin/touch' },
+      { type: 'trojan', tag: 'Good', server: 'example.com', server_port: 443, password: 'hunter2' }
+    ]
+  })
+)
+expect(
+  'из смеси tor+trojan остался только trojan',
+  mixed.length === 1 && mixed[0].type === 'trojan',
+  `узлов ${mixed.length}, типы [${mixed.map((n) => n.type).join(', ')}]`
 )
 
 console.log(`\n${fail === 0 ? '✅' : '❌'} итог: ${pass} ок, ${fail} провалено\n`)
