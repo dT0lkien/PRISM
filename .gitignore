@@ -12,3 +12,6 @@ npm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# Бинарь демона собирается скриптом, в историю не кладём
+resources/helper/

@@ -17,10 +17,10 @@ files:
   - out/**/*
   - package.json
 
+# Общее для всех платформ. Ядро и помощник добавляются в секциях win/mac:
+# класть в сборку оба ядра — это лишняя сотня мегабайт, а helper нужен только
+# на macOS.
 extraResources:
-  - from: resources/core/win
-    to: core
-    filter: ['**/*']
   - from: resources/rules
     to: rules
     filter: ['**/*.srs']
@@ -35,6 +35,16 @@ electronLanguages: [en-US, ru-RU]
 win:
   icon: build/icon.ico
   requestedExecutionLevel: asInvoker
+  extraResources:
+    - from: resources/core/win
+      to: core
+      filter: ['**/*']
+    - from: resources/rules
+      to: rules
+      filter: ['**/*.srs']
+    - from: resources/icons
+      to: icons
+      filter: ['**/*.png']
   artifactName: ${productName}-${version}-${arch}.${ext}
   target:
     - target: nsis
@@ -58,3 +68,39 @@ nsis:
 
 portable:
   artifactName: ${productName}-${version}-portable.${ext}
+
+mac:
+  icon: build/icon.icns
+  category: public.app-category.utilities
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  # Туннель поднимает не приложение, а привилегированный помощник, поэтому
+  # самому приложению никаких особых прав не нужно.
+  extendInfo:
+    LSMinimumSystemVersion: '11.0'
+    NSHumanReadableCopyright: Prism VPN
+  extraResources:
+    - from: resources/core/mac
+      to: core
+      filter: ['**/*']
+    # Помощник и его скрипты: приложение зовёт install.sh через osascript,
+    # он же копирует бинарь в /Library/PrivilegedHelperTools.
+    - from: resources/helper
+      to: helper
+      filter: ['prism-helper']
+    - from: helper
+      to: helper
+      filter: ['install.sh', 'uninstall.sh', 'verify-install.sh']
+    - from: resources/rules
+      to: rules
+      filter: ['**/*.srs']
+    - from: resources/icons
+      to: icons
+      filter: ['**/*.png']
+
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
