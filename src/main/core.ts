@@ -3,7 +3,7 @@
 import { EventEmitter } from 'node:events'
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { promisify } from 'node:util'
-import { writeFileSync, existsSync } from 'node:fs'
+import { writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { createConnection } from 'node:net'
 import type { CoreState, ServerNode } from '@shared/types'
@@ -11,12 +11,24 @@ import { buildConfig, TAG_PROXY } from '@shared/config-builder'
 import { store, paths } from './store'
 import { ClashClient } from './clash'
 import { clearSystemProxy, killStrayCores, readSystemProxy, setSystemProxy, isElevated, IS_WIN } from './win'
+import { HelperClient } from './helper'
+
+/* На macOS ядро может запускать привилегированный демон: TUN требует root, а
+   просить пароль на каждое подключение недопустимо. Но именно «может»:
+   режим прокси root не требует вовсе, поэтому без установленного демона
+   приложение не отказывает, а запускает ядро само — TUN при этом остаётся
+   недоступен, и об этом честно сообщает isElevated(). */
+const HELPER_PLATFORM = process.platform === 'darwin'
 
 const exec = promisify(execFile)
 
 export class Core extends EventEmitter {
   readonly clash = new ClashClient()
   private proc: ChildProcess | null = null
+  /* Соединение с демоном держим открытым всё время работы туннеля: демон
+     гасит ядро, когда уходит последний клиент, и это же уносит туннель, если
+     приложение упало. */
+  private helper: HelperClient | null = null
   private state: CoreState = {
     status: 'stopped',
     elevated: false,
@@ -30,8 +42,9 @@ export class Core extends EventEmitter {
 
   /** PID живого ядра — нужен аварийной уборке на выключении Windows */
   get pid(): number | undefined {
-    return this.proc?.pid
+    return this.proc?.pid ?? this.helperPid
   }
+  private helperPid: number | undefined
 
   getState(): CoreState {
     return { ...this.state }
@@ -98,7 +111,12 @@ export class Core extends EventEmitter {
 
     // 2. Поднимаем процесс
     try {
-      this.spawnCore(configPath)
+      // elevated на macOS означает «демон установлен и отвечает»
+      if (HELPER_PLATFORM && elevated) {
+        await this.startViaHelper(configPath, st.clashPort)
+      } else {
+        this.spawnCore(configPath)
+      }
     } catch (e) {
       this.setState({ status: 'error', error: String(e) })
       return { ok: false, error: String(e) }
@@ -123,7 +141,13 @@ export class Core extends EventEmitter {
         this.setState({ systemProxyOn: true })
         this.log(`Системный прокси включён: 127.0.0.1:${st.localPort}`)
       } catch (e) {
-        this.log(`Не удалось прописать системный прокси: ${e}`, 'warn')
+        // На macOS системный прокси умеет ставить только демон: networksetup
+        // не setuid и без root спросил бы пароль.
+        const hint =
+          HELPER_PLATFORM && !elevated
+            ? `Системный прокси на macOS ставит привилегированный демон — установите его в настройках. Пока направьте программы в 127.0.0.1:${st.localPort} вручную`
+            : `Не удалось прописать системный прокси: ${e}`
+        this.log(hint, 'warn')
       }
     }
 
@@ -158,6 +182,45 @@ export class Core extends EventEmitter {
       throw new Error(`Конфиг не прошёл проверку: ${firstLine(out)}`)
     }
     return paths.runtimeConfig
+  }
+
+  /* Запуск через демон. Конфиг отдаём объектом: демон всё равно проверит его
+     сам — он не верит приложению на слово, даже если приложение своё. */
+  private async startViaHelper(configPath: string, clashPort: number): Promise<void> {
+    const cfg = JSON.parse(readFileSync(configPath, 'utf8'))
+    const c = new HelperClient()
+    try {
+      await c.connect()
+    } catch {
+      throw new Error('Привилегированный демон не отвечает — переустановите его в настройках')
+    }
+    c.on('log', (m: { line?: string }) => {
+      const t = String(m.line ?? '').trim()
+      if (!t) return
+      const lvl = t.match(/\b(TRACE|DEBUG|INFO|WARN|ERROR|FATAL|PANIC)\b/i)?.[1].toLowerCase() ?? 'info'
+      this.emit('log', { level: lvl, message: stripAnsi(t), source: 'core' })
+      if (/FATAL|PANIC/i.test(t)) this.setState({ error: stripAnsi(t) })
+    })
+    c.on('exit', (m: { code?: number; expected?: boolean }) => {
+      this.helperPid = undefined
+      // expected различает штатную остановку и падение: без него обычное
+      // отключение выглядело бы для пользователя как «ядро упало».
+      if (this.intentionalStop || m.expected) return
+      this.log(`Ядро завершилось (код ${m.code ?? '?'})`, 'error')
+      this.handleCrash()
+    })
+    c.on('close', () => {
+      this.helper = null
+      this.helperPid = undefined
+    })
+
+    try {
+      this.helperPid = await c.startCore(cfg, clashPort)
+    } catch (e) {
+      c.close()
+      throw e
+    }
+    this.helper = c
   }
 
   private spawnCore(configPath: string): void {
@@ -234,6 +297,16 @@ export class Core extends EventEmitter {
       await clearSystemProxy(store.get().savedProxy).catch(() => undefined)
       this.setState({ systemProxyOn: false })
       if (!silent) this.log('Системный прокси снят')
+    }
+
+    if (this.helper) {
+      const c = this.helper
+      this.helper = null
+      this.helperPid = undefined
+      // Демон и сам погасит ядро при разрыве, но просим явно — так мы
+      // дожидаемся результата и не оставляем гонку с Clash API.
+      await c.stopCore().catch(() => undefined)
+      c.close()
     }
 
     if (this.proc) {

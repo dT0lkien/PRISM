@@ -1,5 +1,9 @@
-/* Всё, что специфично для Windows: права администратора, системный прокси,
-   автозапуск, перечисление приложений. На macOS/Linux функции деградируют
+/* Платформенный слой: права администратора, системный прокси, автозапуск,
+   перечисление приложений.
+
+   Имя историческое — сначала поддерживалась только Windows. Теперь здесь
+   развилка: ветки Windows живут прямо тут, macOS уходит в ./mac (там всё
+   привилегированное делается через демон), Linux по-прежнему деградирует
    мягко — чтобы интерфейс можно было гонять в разработке. */
 
 import { app, nativeImage } from 'electron'
@@ -7,9 +11,11 @@ import { execFile, execFileSync } from 'node:child_process'
 import { promisify } from 'node:util'
 import { basename } from 'node:path'
 import type { DetectedApp } from '@shared/types'
+import * as mac from './mac'
 
 const exec = promisify(execFile)
 export const IS_WIN = process.platform === 'win32'
+export const IS_MAC = process.platform === 'darwin'
 
 const INET_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings'
 const TASK_NAME = 'PrismVPN-AutoStart'
@@ -52,7 +58,15 @@ async function ps(script: string, timeout = 20000): Promise<string> {
 let elevatedCache: boolean | null = null
 
 export async function isElevated(): Promise<boolean> {
-  if (!IS_WIN) return true // в деве на mac считаем, что прав хватает
+  /* На macOS «есть права» означает «установлен и отвечает наш демон»: сам по
+     себе процесс приложения root никогда не получит. Раньше здесь безусловно
+     возвращалось true, из-за чего TUN проходил проверку и падал уже в ядре —
+     пользователь видел невнятную ошибку вместо «нужно поставить демон». */
+  if (IS_MAC) {
+    const info = await mac.probe()
+    return info.reachable && info.compatible
+  }
+  if (!IS_WIN) return true
   if (elevatedCache !== null) return elevatedCache
   try {
     await exec('net', ['session'], { timeout: 8000, windowsHide: true })
@@ -65,6 +79,13 @@ export async function isElevated(): Promise<boolean> {
 
 /** Перезапуск себя с правами администратора. Возвращает false, если пользователь отказал в UAC. */
 export async function relaunchElevated(extraArgs: string[] = []): Promise<boolean> {
+  /* На macOS «повысить права» — это поставить демон. Перезапуск не нужен:
+     после установки приложение просто начинает его видеть. */
+  if (IS_MAC) {
+    const r = await mac.installHelper()
+    if (!r.ok && r.error) throw new Error(r.error)
+    return r.ok
+  }
   if (!IS_WIN) return false
   const exe = process.execPath
   // В деве execPath — это electron.exe, ему нужен путь к приложению первым аргументом
@@ -101,6 +122,8 @@ export interface ProxyState {
 }
 
 export async function readSystemProxy(): Promise<ProxyState> {
+  /* На macOS прежнее состояние запоминает сам демон — ему же его и
+     восстанавливать, в том числе если приложение не доживёт до выключения. */
   if (!IS_WIN) return { enable: '0', server: '', override: '' }
   const [enable, server, override] = await Promise.all([
     regQuery('ProxyEnable'),
@@ -126,6 +149,12 @@ async function refreshWinInet(): Promise<void> {
 }
 
 export async function setSystemProxy(hostPort: string, bypass = DEFAULT_BYPASS): Promise<void> {
+  if (IS_MAC) {
+    const port = Number(hostPort.split(':').pop())
+    if (!Number.isInteger(port)) throw new Error(`не разобрать порт прокси: ${hostPort}`)
+    await mac.setSystemProxy(port)
+    return
+  }
   if (!IS_WIN) return
   await exec('reg', ['add', INET_KEY, '/v', 'ProxyServer', '/t', 'REG_SZ', '/d', hostPort, '/f'], { windowsHide: true })
   await exec('reg', ['add', INET_KEY, '/v', 'ProxyOverride', '/t', 'REG_SZ', '/d', bypass, '/f'], { windowsHide: true })
@@ -134,6 +163,10 @@ export async function setSystemProxy(hostPort: string, bypass = DEFAULT_BYPASS):
 }
 
 export async function clearSystemProxy(restore?: ProxyState): Promise<void> {
+  if (IS_MAC) {
+    await mac.clearSystemProxy()
+    return
+  }
   if (!IS_WIN) return
   try {
     const wasOn = restore && /0x1|^1$/.test(restore.enable) && restore.server
@@ -198,6 +231,7 @@ export async function hasAutoStartTask(): Promise<boolean> {
 const iconCache = new Map<string, string>()
 
 export async function getAppIcon(path: string): Promise<string | undefined> {
+  if (IS_MAC) return mac.getAppIcon(path)
   if (!path) return undefined
   if (iconCache.has(path)) return iconCache.get(path)
   try {

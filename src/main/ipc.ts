@@ -128,7 +128,10 @@ export function registerIpc(): void {
   h('core:restart', () => core.restart())
   h('core:elevate', async () => {
     const ok = await relaunchElevated()
-    if (ok) setTimeout(() => app.exit(0), 400)
+    /* На Windows права получают перезапуском себя через UAC, поэтому старый
+       процесс обязан уйти. На macOS «повысить права» — это поставить демон,
+       и выходить не нужно: приложение просто начинает его видеть. */
+    if (ok && IS_WIN) setTimeout(() => app.exit(0), 400)
     return ok
   })
   h('core:closeConnection', (id: string) => core.clash.closeConnection(id))

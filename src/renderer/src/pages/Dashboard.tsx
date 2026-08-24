@@ -47,9 +47,29 @@ export default function Dashboard(): JSX.Element {
 
   const last = traffic[traffic.length - 1]
 
+  /* Повышение прав. На Windows приложение перезапускается через UAC и этот
+     процесс умирает. На macOS перезапуск не нужен: ставится помощник, после
+     чего надо лишь перечитать сведения о системе — elevated станет true. */
+  const elevate = async (): Promise<void> => {
+    try {
+      if (!(await window.prism.core.elevate())) {
+        useStore.getState().toast('warn', 'Установка отменена')
+        return
+      }
+    } catch (e) {
+      useStore.getState().toast('error', String((e as Error)?.message ?? e))
+      return
+    }
+    if (info?.isWindows) return // сейчас перезапустимся
+    useStore.setState({ info: await window.prism.bootstrap() })
+    setElevAsk(false)
+    const r = await window.prism.core.start()
+    if (!r.ok) useStore.getState().toast('error', r.error ?? 'Не удалось подключиться')
+  }
+
   const onPower = async (): Promise<void> => {
     if (running || starting) return void toggle()
-    if (snap.settings.captureMode === 'tun' && info && !info.elevated && info.isWindows) {
+    if (snap.settings.captureMode === 'tun' && info && !info.elevated) {
       setElevAsk(true)
       return
     }
@@ -211,7 +231,7 @@ export default function Dashboard(): JSX.Element {
       <Modal
         open={elevAsk}
         onClose={() => setElevAsk(false)}
-        title="Нужны права администратора"
+        title={info?.isWindows ? 'Нужны права администратора' : 'Нужен помощник Prism'}
         icon={<ShieldAlert size={18} color="var(--warn)" />}
         footer={
           <>
@@ -224,21 +244,29 @@ export default function Dashboard(): JSX.Element {
             >
               Использовать системный прокси
             </button>
-            <button className="btn primary" onClick={() => window.prism.core.elevate()}>
-              Перезапустить от администратора
+            <button className="btn primary" onClick={() => void elevate()}>
+              {info?.isWindows ? 'Перезапустить от администратора' : 'Установить помощник'}
             </button>
           </>
         }
       >
         <p className="mut" style={{ fontSize: 13, lineHeight: 1.6 }}>
           Режим <b>TUN</b> создаёт виртуальный сетевой адаптер и перехватывает весь трафик системы, включая UDP —
-          без этого не работает голос в Discord и играх. Windows разрешает это только процессам с правами
-          администратора.
+          без этого не работает голос в Discord и играх. Создавать такой адаптер система разрешает только
+          привилегированному процессу.
         </p>
-        <p className="mut" style={{ fontSize: 13, lineHeight: 1.6 }}>
-          Приложение перезапустится и запросит подтверждение UAC. Чтобы не подтверждать каждый раз, включите
-          «Автозапуск с правами администратора» в настройках.
-        </p>
+        {info?.isWindows ? (
+          <p className="mut" style={{ fontSize: 13, lineHeight: 1.6 }}>
+            Приложение перезапустится и запросит подтверждение UAC. Чтобы не подтверждать каждый раз, включите
+            «Автозапуск с правами администратора» в настройках.
+          </p>
+        ) : (
+          <p className="mut" style={{ fontSize: 13, lineHeight: 1.6 }}>
+            macOS запросит пароль <b>один раз</b> — Prism поставит системный помощник, который и будет поднимать
+            туннель. Дальше пароль не спрашивается. Помощник сам снимает туннель, если приложение закрылось или
+            упало, так что «зависшего» адаптера после него не остаётся.
+          </p>
+        )}
         <p className="dim" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
           Системный прокси прав не требует, но перехватывает только те программы, которые его учитывают, и не
           передаёт UDP.
