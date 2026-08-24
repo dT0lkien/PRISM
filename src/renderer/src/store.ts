@@ -9,7 +9,6 @@ import type {
   TrafficSample, UpdateState } from '@shared/types'
 import type { BootstrapInfo, Snapshot } from '../../preload'
 import { DEFAULT_SETTINGS } from '@shared/defaults'
-import meowUrl from './assets/cats/meow.wav'
 
 export type Page = 'dashboard' | 'servers' | 'routing' | 'apps' | 'connections' | 'logs' | 'settings'
 
@@ -95,7 +94,6 @@ export const useStore = create<State>((set, get) => ({
     api.events.onState((s) => {
       const was = get().core.status
       set({ core: s })
-      if (was !== 'running' && s.status === 'running' && get().snap.settings.theme === 'cats') playMeow()
     })
     api.events.onSnapshot((s) => {
       set({ snap: s })
@@ -226,19 +224,6 @@ const ACCENTS: Record<string, [string, string]> = {
 /** У некоторых тем свой акцент по умолчанию — свой выбор пользователя всё равно главнее */
 const THEME_ACCENT: Partial<Record<Settings['theme'], [string, string]>> = {
   cats: ['#ff7fbe', '#ffa8d5']
-}
-
-/** Мяу при подключении — только в теме «Котики» */
-let meow: HTMLAudioElement | null = null
-function playMeow(): void {
-  try {
-    meow ??= new Audio(meowUrl)
-    meow.volume = 0.55
-    meow.currentTime = 0
-    void meow.play().catch(() => undefined)
-  } catch {
-    /* звук — не то, ради чего стоит падать */
-  }
 }
 
 export function applyTheme(s: Settings): void {
