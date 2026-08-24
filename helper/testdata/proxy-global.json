@@ -1,0 +1,831 @@
+{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-remote",
+        "detour": "proxy",
+        "type": "https",
+        "server": "1.1.1.1",
+        "path": "/dns-query"
+      },
+      {
+        "tag": "dns-direct",
+        "type": "udp",
+        "server": "77.88.8.8"
+      }
+    ],
+    "rules": [
+      {
+        "domain_suffix": [
+          "discord.com",
+          "discordapp.com",
+          "discordapp.net",
+          "discord.gg",
+          "discord.media",
+          "discordcdn.com",
+          "discord.dev",
+          "discord.co",
+          "discordstatus.com",
+          "dis.gd",
+          "discord-attachments-uploads-prd.storage.googleapis.com"
+        ],
+        "server": "dns-remote"
+      },
+      {
+        "rule_set": [
+          "geosite-discord"
+        ],
+        "server": "dns-remote"
+      }
+    ],
+    "final": "dns-remote",
+    "strategy": "prefer_ipv4",
+    "independent_cache": true,
+    "reverse_mapping": false
+  },
+  "inbounds": [
+    {
+      "type": "mixed",
+      "tag": "mixed-in",
+      "listen": "127.0.0.1",
+      "listen_port": 2080
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "selector",
+      "tag": "proxy",
+      "outbounds": [
+        "vless-reality",
+        "vless-ws",
+        "vless-grpc",
+        "vless-httpupgrade",
+        "vless-h2",
+        "vless-quic",
+        "vless-plain",
+        "vmess-ws",
+        "vmess-tcp",
+        "trojan-grpc",
+        "trojan-ws",
+        "ss-aes",
+        "ss-chacha",
+        "hy2-obfs",
+        "hy2-plain",
+        "hy2-insecure",
+        "tuic-bbr",
+        "tuic-plain",
+        "anytls",
+        "socks-auth",
+        "socks-plain",
+        "http-auth",
+        "http-plain",
+        "auto"
+      ],
+      "default": "vless-reality",
+      "interrupt_exist_connections": false
+    },
+    {
+      "type": "urltest",
+      "tag": "auto",
+      "outbounds": [
+        "vless-reality",
+        "vless-ws",
+        "vless-grpc",
+        "vless-httpupgrade",
+        "vless-h2",
+        "vless-quic",
+        "vless-plain",
+        "vmess-ws",
+        "vmess-tcp",
+        "trojan-grpc",
+        "trojan-ws",
+        "ss-aes",
+        "ss-chacha",
+        "hy2-obfs",
+        "hy2-plain",
+        "hy2-insecure",
+        "tuic-bbr",
+        "tuic-plain",
+        "anytls",
+        "socks-auth",
+        "socks-plain",
+        "http-auth",
+        "http-plain"
+      ],
+      "url": "https://www.gstatic.com/generate_204",
+      "interval": "10m",
+      "tolerance": 50,
+      "idle_timeout": "30m",
+      "interrupt_exist_connections": false
+    },
+    {
+      "type": "vless",
+      "server": "example.com",
+      "server_port": 443,
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "tls": {
+        "enabled": true,
+        "server_name": "www.microsoft.com",
+        "insecure": false,
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "VXFVG7CC-NQrdWhsTwvc830w5RpYGbFXb_4tgNTB2Dg",
+          "short_id": "ab12"
+        }
+      },
+      "tag": "vless-reality"
+    },
+    {
+      "type": "vless",
+      "server": "example.com",
+      "server_port": 443,
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "packet_encoding": "xudp",
+      "tls": {
+        "enabled": true,
+        "server_name": "c.com",
+        "insecure": false,
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "transport": {
+        "type": "ws",
+        "path": "/ws",
+        "headers": {
+          "Host": "c.com"
+        },
+        "max_early_data": 2048,
+        "early_data_header_name": "Sec-WebSocket-Protocol"
+      },
+      "tag": "vless-ws"
+    },
+    {
+      "type": "vless",
+      "server": "example.com",
+      "server_port": 443,
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "packet_encoding": "xudp",
+      "tls": {
+        "enabled": true,
+        "server_name": "c.com",
+        "insecure": false,
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "transport": {
+        "type": "grpc",
+        "service_name": "gsvc"
+      },
+      "tag": "vless-grpc"
+    },
+    {
+      "type": "vless",
+      "server": "example.com",
+      "server_port": 443,
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "packet_encoding": "xudp",
+      "tls": {
+        "enabled": true,
+        "server_name": "c.com",
+        "insecure": false,
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "transport": {
+        "type": "httpupgrade",
+        "host": "c.com",
+        "path": "/up"
+      },
+      "tag": "vless-httpupgrade"
+    },
+    {
+      "type": "vless",
+      "server": "example.com",
+      "server_port": 443,
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "packet_encoding": "xudp",
+      "tls": {
+        "enabled": true,
+        "server_name": "c.com",
+        "insecure": false,
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "transport": {
+        "type": "http",
+        "host": [
+          "c.com"
+        ],
+        "path": "/h2"
+      },
+      "tag": "vless-h2"
+    },
+    {
+      "type": "vless",
+      "server": "example.com",
+      "server_port": 443,
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "packet_encoding": "xudp",
+      "tls": {
+        "enabled": true,
+        "server_name": "c.com",
+        "insecure": false,
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "transport": {
+        "type": "quic"
+      },
+      "tag": "vless-quic"
+    },
+    {
+      "type": "vless",
+      "server": "example.com",
+      "server_port": 8080,
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "packet_encoding": "xudp",
+      "tag": "vless-plain"
+    },
+    {
+      "type": "vmess",
+      "server": "example.com",
+      "server_port": 443,
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "security": "auto",
+      "alter_id": 0,
+      "packet_encoding": "xudp",
+      "tls": {
+        "enabled": true,
+        "server_name": "cdn.example.com",
+        "insecure": false,
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "transport": {
+        "type": "ws",
+        "path": "/vm",
+        "headers": {
+          "Host": "cdn.example.com"
+        }
+      },
+      "tag": "vmess-ws"
+    },
+    {
+      "type": "vmess",
+      "server": "example.com",
+      "server_port": 8080,
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "security": "auto",
+      "alter_id": 2,
+      "packet_encoding": "xudp",
+      "tag": "vmess-tcp"
+    },
+    {
+      "type": "trojan",
+      "server": "example.com",
+      "server_port": 443,
+      "password": "hunter2",
+      "tls": {
+        "enabled": true,
+        "server_name": "example.com",
+        "insecure": false,
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "transport": {
+        "type": "grpc",
+        "service_name": "g"
+      },
+      "tag": "trojan-grpc"
+    },
+    {
+      "type": "trojan",
+      "server": "example.com",
+      "server_port": 443,
+      "password": "hunter2",
+      "tls": {
+        "enabled": true,
+        "server_name": "example.com",
+        "insecure": false,
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "transport": {
+        "type": "ws",
+        "path": "/tj"
+      },
+      "tag": "trojan-ws"
+    },
+    {
+      "type": "shadowsocks",
+      "server": "example.com",
+      "server_port": 8388,
+      "method": "aes-256-gcm",
+      "password": "hunter2",
+      "tag": "ss-aes"
+    },
+    {
+      "type": "shadowsocks",
+      "server": "example.com",
+      "server_port": 8389,
+      "method": "chacha20-ietf-poly1305",
+      "password": "hunter2",
+      "tag": "ss-chacha"
+    },
+    {
+      "type": "hysteria2",
+      "server": "example.com",
+      "server_port": 443,
+      "password": "hunter2",
+      "obfs": {
+        "type": "salamander",
+        "password": "abc"
+      },
+      "tls": {
+        "enabled": true,
+        "server_name": "example.com",
+        "insecure": false,
+        "alpn": [
+          "h3"
+        ]
+      },
+      "tag": "hy2-obfs"
+    },
+    {
+      "type": "hysteria2",
+      "server": "example.com",
+      "server_port": 443,
+      "password": "hunter2",
+      "tls": {
+        "enabled": true,
+        "server_name": "example.com",
+        "insecure": false,
+        "alpn": [
+          "h3"
+        ]
+      },
+      "tag": "hy2-plain"
+    },
+    {
+      "type": "hysteria2",
+      "server": "example.com",
+      "server_port": 443,
+      "password": "hunter2",
+      "tls": {
+        "enabled": true,
+        "server_name": "example.com",
+        "insecure": true,
+        "alpn": [
+          "h3"
+        ]
+      },
+      "tag": "hy2-insecure"
+    },
+    {
+      "type": "tuic",
+      "server": "example.com",
+      "server_port": 443,
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "password": "hunter2",
+      "congestion_control": "bbr",
+      "udp_relay_mode": "quic",
+      "zero_rtt_handshake": false,
+      "heartbeat": "10s",
+      "tls": {
+        "enabled": true,
+        "server_name": "example.com",
+        "insecure": false,
+        "alpn": [
+          "h3"
+        ]
+      },
+      "tag": "tuic-bbr"
+    },
+    {
+      "type": "tuic",
+      "server": "example.com",
+      "server_port": 443,
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "password": "hunter2",
+      "congestion_control": "bbr",
+      "udp_relay_mode": "native",
+      "zero_rtt_handshake": false,
+      "heartbeat": "10s",
+      "tls": {
+        "enabled": true,
+        "server_name": "example.com",
+        "insecure": false,
+        "alpn": [
+          "h3"
+        ]
+      },
+      "tag": "tuic-plain"
+    },
+    {
+      "type": "anytls",
+      "server": "example.com",
+      "server_port": 8443,
+      "password": "hunter2",
+      "idle_session_check_interval": "30s",
+      "idle_session_timeout": "30s",
+      "tls": {
+        "enabled": true,
+        "server_name": "example.com",
+        "insecure": false,
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "tag": "anytls"
+    },
+    {
+      "type": "socks",
+      "server": "example.com",
+      "server_port": 1080,
+      "version": "5",
+      "username": "user",
+      "password": "pass",
+      "tag": "socks-auth"
+    },
+    {
+      "type": "socks",
+      "server": "example.com",
+      "server_port": 1081,
+      "version": "5",
+      "tag": "socks-plain"
+    },
+    {
+      "type": "http",
+      "server": "example.com",
+      "server_port": 8080,
+      "username": "user",
+      "password": "pass",
+      "tag": "http-auth"
+    },
+    {
+      "type": "http",
+      "server": "example.com",
+      "server_port": 8081,
+      "tag": "http-plain"
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "action": "sniff",
+        "timeout": "500ms"
+      },
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "ip_is_private": true,
+        "outbound": "direct"
+      },
+      {
+        "network": [
+          "udp"
+        ],
+        "port": [
+          443
+        ],
+        "action": "reject",
+        "method": "default"
+      },
+      {
+        "process_name": [
+          "Bad.exe"
+        ],
+        "action": "reject"
+      },
+      {
+        "process_name": [
+          "Discord.exe"
+        ],
+        "outbound": "proxy"
+      },
+      {
+        "domain_suffix": [
+          "example.org"
+        ],
+        "ip_cidr": [
+          "1.2.3.0/24"
+        ],
+        "port_range": [
+          "5000:6000"
+        ],
+        "network": [
+          "udp"
+        ],
+        "outbound": "proxy"
+      },
+      {
+        "process_name": [
+          "Discord.exe",
+          "DiscordPTB.exe",
+          "DiscordCanary.exe",
+          "DiscordDevelopment.exe",
+          "Update.exe"
+        ],
+        "outbound": "proxy"
+      },
+      {
+        "domain_suffix": [
+          "discord.com",
+          "discordapp.com",
+          "discordapp.net",
+          "discord.gg",
+          "discord.media",
+          "discordcdn.com",
+          "discord.dev",
+          "discord.co",
+          "discordstatus.com",
+          "dis.gd",
+          "discord-attachments-uploads-prd.storage.googleapis.com"
+        ],
+        "outbound": "proxy"
+      },
+      {
+        "rule_set": [
+          "geosite-discord"
+        ],
+        "outbound": "proxy"
+      },
+      {
+        "rule_set": [
+          "geosite-telegram"
+        ],
+        "outbound": "proxy"
+      },
+      {
+        "process_name": [
+          "Telegram.exe",
+          "Unigram.exe"
+        ],
+        "outbound": "proxy"
+      },
+      {
+        "rule_set": [
+          "geosite-youtube",
+          "geosite-netflix",
+          "geosite-spotify",
+          "geosite-twitch"
+        ],
+        "outbound": "proxy"
+      },
+      {
+        "rule_set": [
+          "geosite-openai",
+          "geosite-category-ai"
+        ],
+        "outbound": "proxy"
+      },
+      {
+        "rule_set": [
+          "geosite-meta",
+          "geosite-twitter",
+          "geosite-tiktok"
+        ],
+        "outbound": "proxy"
+      }
+    ],
+    "rule_set": [
+      {
+        "type": "local",
+        "tag": "geosite-discord",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-discord.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-telegram",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-telegram.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-youtube",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-youtube.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-netflix",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-netflix.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-spotify",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-spotify.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-twitch",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-twitch.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-openai",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-openai.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-category-ai",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-category-ai.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-meta",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-meta.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-twitter",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-twitter.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-tiktok",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-tiktok.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-category-ru",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-category-ru.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-tld-ru",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-tld-ru.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-category-gov-ru",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-category-gov-ru.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-category-bank-ru",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-category-bank-ru.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-tbank-ru",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-tbank-ru.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-category-ecommerce-ru",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-category-ecommerce-ru.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-category-media-ru",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-category-media-ru.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-yandex",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-yandex.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-vk",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-vk.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-mailru",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-mailru.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geoip-ru",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geoip-ru.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-steam",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-steam.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-epicgames",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-epicgames.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-ea",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-ea.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-ubisoft",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-ubisoft.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-playstation",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-playstation.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-xbox",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-xbox.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-nintendo",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-nintendo.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-roblox",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-roblox.srs"
+      },
+      {
+        "type": "local",
+        "tag": "geosite-category-games",
+        "format": "binary",
+        "path": "/Users/burlak/Documents/VPN/.claude/worktrees/prism-macos-support/resources/rules/geosite-category-games.srs"
+      }
+    ],
+    "final": "proxy",
+    "auto_detect_interface": true,
+    "default_domain_resolver": {
+      "server": "dns-direct"
+    }
+  },
+  "experimental": {
+    "cache_file": {
+      "enabled": true,
+      "path": "/НЕВЕРНЫЙ/cache.db",
+      "store_fakeip": false,
+      "store_rdrc": true
+    },
+    "clash_api": {
+      "external_controller": "127.0.0.1:9291",
+      "secret": "secret123",
+      "default_mode": "rule"
+    }
+  }
+}
