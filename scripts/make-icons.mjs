@@ -346,3 +346,31 @@ console.log('✓ resources/icons/logo.png 512')
 mkdirSync(join(ROOT, 'src/renderer/src/assets'), { recursive: true })
 writeFileSync(join(ROOT, 'src/renderer/src/assets/logo.png'), encodePng(png256, 256))
 console.log('✓ src/renderer/src/assets/logo.png 256')
+
+/* ─────────── icns для macOS ───────────
+   Каждый размер рисуем нативно тем же render(), а не растягиваем 256px: у
+   иконки есть мелкие детали, и апскейл до 1024 для retina их бы размазал.
+   Собираем штатным iconutil — он есть на любом маке. */
+if (process.platform === 'darwin') {
+  const { execFileSync } = await import('node:child_process')
+  const { mkdtempSync, rmSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+
+  const set = join(mkdtempSync(join(tmpdir(), 'prism-icns-')), 'icon.iconset')
+  mkdirSync(set, { recursive: true })
+  for (const [size, name] of [
+    [16, 'icon_16x16.png'], [32, 'icon_16x16@2x.png'],
+    [32, 'icon_32x32.png'], [64, 'icon_32x32@2x.png'],
+    [128, 'icon_128x128.png'], [256, 'icon_128x128@2x.png'],
+    [256, 'icon_256x256.png'], [512, 'icon_256x256@2x.png'],
+    [512, 'icon_512x512.png'], [1024, 'icon_512x512@2x.png']
+  ]) {
+    writeFileSync(join(set, name), encodePng(render(size, appShade), size))
+  }
+  const out = join(ROOT, 'build/icon.icns')
+  execFileSync('/usr/bin/iconutil', ['-c', 'icns', set, '-o', out])
+  rmSync(join(set, '..'), { recursive: true, force: true })
+  console.log('✓ build/icon.icns')
+} else {
+  console.log('▸ icns собирается только на macOS — пропускаю')
+}
