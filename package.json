@@ -1,6 +1,6 @@
 {
   "name": "prism-vpn",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Prism — гибкий VPN-клиент с TUN, системным прокси и маршрутизацией по приложениям",
   "main": "./out/main/index.js",
   "author": "Prism",

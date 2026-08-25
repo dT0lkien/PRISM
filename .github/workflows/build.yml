@@ -96,3 +96,66 @@ jobs:
             dist/*.blockmap
             dist/latest.yml
             dist/SHA256SUMS.txt
+
+  macos:
+    name: Сборка под macOS
+    runs-on: macos-latest
+    needs: checks
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # Go нужен для привилегированного помощника — на раннере он уже есть,
+      # фиксируем версию, чтобы сборка не поехала на обновлении образа
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+      - run: npm ci
+      - name: Скачать ядро
+        run: node scripts/fetch-resources.mjs
+      - name: Собрать помощник
+        run: npm run build:helper
+      - name: Проверить помощник
+        run: npm run test:helper
+      - name: Собрать
+        run: npm run build
+      - name: Упаковать .dmg
+        # Сертификата Developer ID в CI нет, подписываем ad-hoc: без подписи
+        # приложение на Apple Silicon просто не запустится. Нотаризации нет,
+        # поэтому Gatekeeper будет ругаться — об этом сказано в описании релиза.
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --mac --publish never
+
+      - name: Контрольные суммы
+        run: |
+          cd dist
+          shasum -a 256 *.dmg *.zip > SHA256SUMS-mac.txt
+          cat SHA256SUMS-mac.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Prism-macos
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/latest-mac.yml
+            dist/SHA256SUMS-mac.txt
+          retention-days: 30
+
+      - name: Выложить в релиз
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Prism ${{ github.ref_name }}
+          body_path: .github/release-body.md
+          generate_release_notes: true
+          files: |
+            dist/*.dmg
+            dist/*.zip
+            dist/latest-mac.yml
+            dist/SHA256SUMS-mac.txt
