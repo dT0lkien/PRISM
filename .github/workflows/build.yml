@@ -114,6 +114,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26'
+          # У помощника нет внешних зависимостей и go.sum — кэшировать нечего
+          cache: false
       - run: npm ci
       - name: Скачать ядро
         run: node scripts/fetch-resources.mjs
