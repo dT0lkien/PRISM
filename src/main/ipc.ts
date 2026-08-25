@@ -94,6 +94,48 @@ export function wireCoreEvents(): void {
   })
 }
 
+/* ─────────────── проверка аргументов, пришедших из renderer ───────────────
+   Renderer свой и изолирован (contextIsolation + CSP default-src 'self'), так что
+   это не защита от активного противника, а защита в глубину: страховка от
+   повреждённого состояния и от XSS, если он однажды случится. Поэтому только
+   там, где кривой аргумент утекает дальше main: в конфиг ядра, в строку
+   системного прокси или в прототип объекта. Без схем и без зависимостей. */
+
+const isStr = (v: unknown): v is string => typeof v === 'string'
+
+/** Порт уезжает в конфиг ядра и в строку системного прокси `127.0.0.1:${порт}`. */
+const okPort = (v: unknown, prev: number): number =>
+  Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 65535 ? (v as number) : prev
+
+/** Неизвестное значение перечисления отбрасываем, оставляя прежнее. */
+const oneOf = <T extends string>(v: unknown, allowed: readonly T[], prev: T): T =>
+  allowed.includes(v as T) ? (v as T) : prev
+
+const CAPTURE_MODES = ['tun', 'proxy'] as const
+const ROUTING_MODES = ['global', 'smart', 'whitelist', 'direct'] as const
+const LOG_LEVELS = ['trace', 'debug', 'info', 'warn', 'error'] as const
+const TUN_STACKS = ['mixed', 'gvisor', 'system'] as const
+const DNS_STRATEGIES = ['prefer_ipv4', 'prefer_ipv6', 'ipv4_only', 'ipv6_only'] as const
+
+/* Правим только пришедшие ключи: патч частичный, дописывать в него недостающее
+   нельзя — settings:update по разнице before/after решает, перезапускать ли ядро. */
+function cleanSettings(patch: Partial<Settings>, cur: Settings): Partial<Settings> {
+  if (!patch || typeof patch !== 'object') return {}
+  const out: Partial<Settings> = { ...patch }
+  if ('localPort' in patch) out.localPort = okPort(patch.localPort, cur.localPort)
+  if ('clashPort' in patch) out.clashPort = okPort(patch.clashPort, cur.clashPort)
+  if ('captureMode' in patch) out.captureMode = oneOf(patch.captureMode, CAPTURE_MODES, cur.captureMode)
+  if ('routingMode' in patch) out.routingMode = oneOf(patch.routingMode, ROUTING_MODES, cur.routingMode)
+  if ('logLevel' in patch) out.logLevel = oneOf(patch.logLevel, LOG_LEVELS, cur.logLevel)
+  if (patch.tun && 'stack' in patch.tun) {
+    out.tun = { ...patch.tun, stack: oneOf(patch.tun.stack, TUN_STACKS, cur.tun.stack) }
+  }
+  if (patch.dns && 'strategy' in patch.dns) {
+    out.dns = { ...patch.dns, strategy: oneOf(patch.dns.strategy, DNS_STRATEGIES, cur.dns.strategy) }
+  }
+  return out
+}
+
 /* ─────────────────────── регистрация обработчиков ─────────────────────── */
 
 export function registerIpc(): void {
@@ -131,7 +173,7 @@ export function registerIpc(): void {
     if (ok) setTimeout(() => app.exit(0), 400)
     return ok
   })
-  h('core:closeConnection', (id: string) => core.clash.closeConnection(id))
+  h('core:closeConnection', (id: string) => (isStr(id) ? core.clash.closeConnection(id) : undefined))
   h('core:closeAllConnections', () => core.clash.closeAllConnections())
 
   /* — обновления — */
@@ -143,7 +185,7 @@ export function registerIpc(): void {
   /* — настройки — */
   h('settings:update', async (patch: Partial<Settings>) => {
     const before = store.get().settings
-    const after = store.setSettings(patch)
+    const after = store.setSettings(cleanSettings(patch, before))
     pushSnapshot()
 
     // Изменения, требующие перезапуска ядра
@@ -182,7 +224,7 @@ export function registerIpc(): void {
   })
 
   /* — серверы — */
-  h('nodes:select', (id: string) => core.selectNode(id))
+  h('nodes:select', (id: string) => (isStr(id) ? core.selectNode(id) : false))
 
   h('nodes:measure', async (id: string) => {
     const ms = await core.measure(id)
@@ -220,7 +262,7 @@ export function registerIpc(): void {
 
   h('nodes:remove', (ids: string[]) => {
     const d = store.get()
-    const set = new Set(ids)
+    const set = new Set(Array.isArray(ids) ? ids.filter(isStr) : [])
     const nodes = d.nodes.filter((n) => !set.has(n.id))
     const activeNodeId = set.has(d.activeNodeId ?? '') ? nodes[0]?.id : d.activeNodeId
     store.patch({ nodes, activeNodeId })
@@ -229,8 +271,8 @@ export function registerIpc(): void {
   })
 
   h('nodes:rename', (id: string, name: string) => {
-    const n = store.get().nodes.find((x) => x.id === id)
-    if (n) n.name = name.trim() || n.name
+    const n = isStr(id) ? store.get().nodes.find((x) => x.id === id) : undefined
+    if (n && isStr(name)) n.name = name.trim() || n.name
     store.save()
     pushSnapshot()
     return snapshot()
@@ -271,7 +313,7 @@ export function registerIpc(): void {
 
   h('subs:update', async (id: string) => {
     const d = store.get()
-    const sub = d.subscriptions.find((s) => s.id === id)
+    const sub = isStr(id) ? d.subscriptions.find((s) => s.id === id) : undefined
     if (!sub) return { result: { ok: false, added: 0, updated: 0, skipped: 0, names: [], error: 'Подписка не найдена' }, snapshot: snapshot() }
     try {
       const { nodes: fresh, userInfo } = await fetchSubscription(sub.url, id)
@@ -312,6 +354,7 @@ export function registerIpc(): void {
 
   h('subs:remove', (id: string, withNodes: boolean) => {
     const d = store.get()
+    if (!isStr(id)) return snapshot()
     const subscriptions = d.subscriptions.filter((s) => s.id !== id)
     const nodes = withNodes ? d.nodes.filter((n) => n.subscriptionId !== id) : d.nodes
     const activeNodeId = nodes.some((n) => n.id === d.activeNodeId) ? d.activeNodeId : nodes[0]?.id
@@ -320,9 +363,21 @@ export function registerIpc(): void {
     return snapshot()
   })
 
+  /* Object.assign писал в подписку любые ключи, а он идёт через [[Set]] — то есть
+     ключ __proto__ в патче менял прототип объекта подписки. Редактируемых полей
+     всего четыре, их и переносим поштучно; остальное игнорируем. */
   h('subs:patch', (id: string, patch: Partial<Subscription>) => {
     const s = store.get().subscriptions.find((x) => x.id === id)
-    if (s) Object.assign(s, patch)
+    if (s && patch && typeof patch === 'object') {
+      if (isStr(patch.name)) s.name = patch.name
+      if (isStr(patch.url)) s.url = patch.url
+      if (typeof patch.autoUpdate === 'boolean') s.autoUpdate = patch.autoUpdate
+      /* NaN тут особенно вреден: в планировщике Math.max(1, NaN) даёт NaN,
+         сравнение `now < due` становится false и подписка обновляется каждый тик. */
+      if (Number.isFinite(patch.intervalHours) && (patch.intervalHours as number) >= 1) {
+        s.intervalHours = patch.intervalHours as number
+      }
+    }
     store.save()
     pushSnapshot()
     return snapshot()

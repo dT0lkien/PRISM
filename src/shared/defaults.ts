@@ -14,8 +14,7 @@ export const DEFAULT_SETTINGS: Settings = {
     mtu: 9000,
     autoRoute: true,
     strictRoute: true,
-    ipv6: false,
-    excludePackages: []
+    ipv6: false
   },
 
   dns: {
@@ -30,7 +29,6 @@ export const DEFAULT_SETTINGS: Settings = {
   discordFix: true,
   blockQuic: true,
   bypassPrivate: true,
-  killSwitch: false,
 
   autoStart: false,
   autoUpdate: true,
@@ -46,8 +44,7 @@ export const DEFAULT_SETTINGS: Settings = {
   language: 'ru',
   logLevel: 'info',
 
-  extraConfig: '',
-  manualConfig: false
+  extraConfig: ''
 }
 
 export const DEFAULT_ENABLED_PRESETS = DEFAULT_PRESETS

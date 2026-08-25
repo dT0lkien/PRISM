@@ -9,6 +9,20 @@ import { clearStaleProxy, clearSystemProxy, emergencyCleanupSync, isElevated, ki
 import { fetchSubscription, mergeSubscriptionNodes } from './subs'
 
 const isDev = !app.isPackaged
+
+/* Свой ли адрес: в разработке renderer живёт на dev-сервере, в проде — на file://
+   из loadFile. Нужно именно так, а не «запрещать всё»: перезагрузка страницы и
+   полный reload от HMR — это навигация на тот же URL, и глухой запрет сломал бы
+   npm run dev. У file:// origin равен "null", поэтому сверяем протокол. */
+function isAppUrl(url: string): boolean {
+  const devUrl = process.env['ELECTRON_RENDERER_URL']
+  try {
+    const u = new URL(url)
+    return isDev && devUrl ? u.origin === new URL(devUrl).origin : u.protocol === 'file:'
+  } catch {
+    return false
+  }
+}
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
 let quitting = false
@@ -44,7 +58,10 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      /* preload берёт из electron только contextBridge и ipcRenderer, Node-модулей
+         в нём нет — значит песочницу отключать не за чем, а с ней компрометация
+         renderer перестаёт давать доступ к примитивам ОС и к Node в preload. */
+      sandbox: true,
       spellcheck: false
     }
   })
@@ -91,6 +108,16 @@ function createWindow(): void {
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url)
     return { action: 'deny' }
+  })
+
+  /* Новые окна перехватываются выше, а навигация самого окна — нет. Уведи
+     renderer на внешний адрес — и окно приложения станет браузером на чужой
+     странице, у которой уже есть мост window.prism со всеми 44 каналами.
+     Поэтому чужую навигацию отменяем и отдаём системному браузеру, как выше. */
+  win.webContents.on('will-navigate', (e, url) => {
+    if (isAppUrl(url)) return
+    e.preventDefault()
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url)
   })
 
   const devUrl = process.env['ELECTRON_RENDERER_URL']

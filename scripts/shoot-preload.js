@@ -44,7 +44,7 @@ const settings = {
   localPort: 2080,
   allowLan: false,
   clashPort: 9291,
-  tun: { stack: 'mixed', mtu: 9000, autoRoute: true, strictRoute: true, ipv6: false, excludePackages: [] },
+  tun: { stack: 'mixed', mtu: 9000, autoRoute: true, strictRoute: true, ipv6: false },
   dns: {
     remote: 'https://1.1.1.1/dns-query',
     local: '77.88.8.8',
@@ -56,7 +56,6 @@ const settings = {
   discordFix: true,
   blockQuic: true,
   bypassPrivate: true,
-  killSwitch: false,
   autoStart: true,
   autoConnect: false,
   startElevated: true,
@@ -68,8 +67,7 @@ const settings = {
   graphStyle: process.env.PRISM_GRAPH || 'mirror',
   language: 'ru',
   logLevel: 'info',
-  extraConfig: '',
-  manualConfig: false
+  extraConfig: ''
 }
 
 const snapshot = {

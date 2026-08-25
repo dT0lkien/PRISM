@@ -120,8 +120,6 @@ export interface Settings {
     autoRoute: boolean
     strictRoute: boolean
     ipv6: boolean
-    /** Исключить эти приложения из TUN на уровне ядра (не заворачивать вовсе) */
-    excludePackages: string[]
   }
 
   dns: {
@@ -138,7 +136,6 @@ export interface Settings {
   discordFix: boolean
   blockQuic: boolean
   bypassPrivate: boolean
-  killSwitch: boolean
 
   /** Поведение приложения */
   autoStart: boolean
@@ -160,8 +157,6 @@ export interface Settings {
 
   /** Сырой JSON, который сливается поверх сгенерированного конфига */
   extraConfig: string
-  /** Полностью ручной конфиг вместо генератора */
-  manualConfig: boolean
 }
 
 export type UpdateStatus =
