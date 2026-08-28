@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Activity,
@@ -15,10 +15,12 @@ import {
   X,
   AlertTriangle,
   ArrowUpCircle,
-  Info
+  Info,
+  Sparkles
 } from 'lucide-react'
+import { CHANGELOG } from '@shared/changelog'
 import { useStore, type Page } from './store'
-import { spring } from './ui'
+import { Modal, spring } from './ui'
 import Dashboard from './pages/Dashboard'
 import Servers from './pages/Servers'
 import Routing from './pages/Routing'
@@ -180,6 +182,8 @@ export default function App(): JSX.Element {
         </main>
       </div>
 
+      <WhatsNew />
+
       <div className="toasts">
         <AnimatePresence>
           {toasts.map((t) => (
@@ -205,6 +209,46 @@ export default function App(): JSX.Element {
         </AnimatePresence>
       </div>
     </div>
+  )
+}
+
+/** Что изменилось в этой версии — один раз после обновления.
+    Записи живут в shared/changelog.ts */
+function WhatsNew(): JSX.Element | null {
+  const info = useStore((s) => s.info)
+  const rel = CHANGELOG.find((r) => r.version === info?.appVersion)
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (!info || !rel || info.seenVersion === info.appVersion) return
+    setOpen(true)
+    /* Помечаем сразу при показе, а не при закрытии: окно обещано «один раз»,
+       и оно не должно возвращаться, если приложение закрыли, не читая. */
+    void window.prism.update.markSeen()
+  }, [info, rel])
+
+  if (!rel) return null
+  return (
+    <Modal
+      open={open}
+      onClose={() => setOpen(false)}
+      title={`Что нового в ${rel.version}`}
+      icon={<Sparkles size={18} color="var(--accent-1)" />}
+      footer={
+        <button className="btn primary" onClick={() => setOpen(false)}>
+          Понятно
+        </button>
+      }
+    >
+      <div className="whatsnew">
+        <span className="date">{new Date(rel.date).toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+        <ul>
+          {rel.items.map((t) => (
+            <li key={t}>{t}</li>
+          ))}
+        </ul>
+      </div>
+    </Modal>
   )
 }
 

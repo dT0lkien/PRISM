@@ -1695,6 +1695,37 @@ textarea.input {
   user-select: text;
 }
 
+/* окно «что изменилось» после обновления */
+.whatsnew .date {
+  font-size: 11.5px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+.whatsnew ul {
+  list-style: none;
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.whatsnew li {
+  position: relative;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.whatsnew li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+}
+
 /* значок в боковом меню, когда обновление скачано */
 .upd-dot {
   display: inline-flex;
@@ -2846,4 +2877,629 @@ textarea.input {
   margin-right: 7px;
   vertical-align: -3px;
   background: var(--paw) center / contain no-repeat;
+}
+
+/* ═══════════ «Хром» — жидкий металл, чёрный фон и звёзды нулевых ═══════════
+   Собрано из трёх приёмов: хромированный градиент (свет–тень–свет с резким
+   переломом посередине), четырёхлучевая звезда как единственный «орнамент»
+   и рубленая моноширинная типографика спецификации. Цвета почти отсутствуют:
+   металл и один фиолетовый блик. */
+[data-theme='chrome'] {
+  --bg: #04040a;
+  --bg-2: #090b14;
+  --panel: rgba(202, 214, 255, 0.055);
+  --panel-2: rgba(202, 214, 255, 0.1);
+  --panel-3: rgba(202, 214, 255, 0.16);
+  --line: rgba(206, 218, 255, 0.14);
+  --line-2: rgba(206, 218, 255, 0.32);
+  --text: #eef1fb;
+  --muted: #a7b0d0;
+  --dim: #757e9e;
+  /* Плёнка с телевизионными строками: чёрный не должен быть плоским */
+  --scrim:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.028) 0 1px, rgba(0, 0, 0, 0) 1px 3px),
+    linear-gradient(168deg, rgba(3, 3, 8, 0.16), rgba(3, 3, 8, 0.34) 55%, rgba(3, 3, 8, 0.5));
+
+  /* Углы почти прямые: скруглениям в этой эстетике места нет */
+  --r-sm: 3px;
+  --r: 5px;
+  --r-lg: 6px;
+  --r-xl: 8px;
+
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.75);
+
+  /* Четырёхлучевая звезда — единственная фигура темы */
+  --star: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 0C53.5 35 65 46.5 100 50 65 53.5 53.5 65 50 100 46.5 65 35 53.5 0 50 35 46.5 46.5 35 50 0Z' fill='%23fff'/%3E%3C/svg%3E");
+
+  /* Полированный металл: свет сверху, резкий перелом, отражённый свет снизу */
+  --chrome: linear-gradient(
+    180deg,
+    rgba(232, 238, 255, 0.22) 0%,
+    rgba(140, 152, 196, 0.13) 47%,
+    rgba(6, 8, 16, 0.55) 50%,
+    rgba(120, 133, 178, 0.14) 76%,
+    rgba(214, 224, 255, 0.2) 100%
+  );
+  --chrome-edge: inset 0 1px 0 rgba(255, 255, 255, 0.34), inset 0 -1px 0 rgba(255, 255, 255, 0.12);
+  /* Хромированный текст: та же логика, но контрастнее — читается как отлитая надпись */
+  --chrome-text: linear-gradient(
+    180deg,
+    #ffffff 0%,
+    #c3cbe8 34%,
+    #5d658c 50%,
+    #e9eeff 62%,
+    #99a3c8 84%,
+    #f2f5ff 100%
+  );
+}
+
+/* ── фон: разлитый металл ── */
+[data-theme='chrome'] .aurora {
+  opacity: 1;
+  filter: none;
+  overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 0%, rgba(139, 123, 255, 0.16), transparent 60%), #04040a;
+}
+/* Свечение по умолчанию гасится, когда VPN выключен, — металл при этом должен
+   остаться виден, иначе окно становится просто чёрным прямоугольником */
+[data-theme='chrome'] .app[data-status='stopped'] .aurora {
+  opacity: 0.6;
+}
+[data-theme='chrome'] .app[data-status='error'] .aurora {
+  opacity: 0.72;
+}
+/* Металл: конический градиент с частым чередованием света и тени. Размытие
+   делает переходы текучими, медленное вращение — живыми. */
+[data-theme='chrome'] .aurora::before {
+  content: '';
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: 170vmax;
+  height: 170vmax;
+  margin: -85vmax 0 0 -85vmax;
+  background: conic-gradient(
+    from 0deg,
+    #05050c 0deg,
+    #b6c1e8 20deg,
+    #0a0a16 42deg,
+    #666e9e 64deg,
+    #04040a 90deg,
+    #e6ecff 114deg,
+    #0b0b18 138deg,
+    #8b96cc 166deg,
+    #05050c 194deg,
+    #c6d0f2 222deg,
+    #090914 248deg,
+    #565e8c 274deg,
+    #04040a 300deg,
+    #dde4ff 328deg,
+    #05050c 360deg
+  );
+  filter: blur(10px) contrast(165%);
+  opacity: 0.95;
+  animation: chrome-flow 140s linear infinite;
+}
+@keyframes chrome-flow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* Звёздная россыпь поверх металла */
+[data-theme='chrome'] .aurora::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: var(--star), var(--star), var(--star), var(--star), var(--star), var(--star);
+  background-repeat: no-repeat;
+  background-position: 4% 62%, 97% 22%, 30% 97%, 71% 3%, 99% 88%, 2% 8%;
+  background-size: 52px 52px, 26px 26px, 36px 36px, 19px 19px, 23px 23px, 15px 15px;
+  opacity: 0.85;
+  filter: drop-shadow(0 0 14px rgba(190, 205, 255, 0.9));
+  animation: chrome-twinkle 7s ease-in-out infinite;
+}
+@keyframes chrome-twinkle {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+/* Спаны свечения превращаются в холодные блики на металле */
+[data-theme='chrome'] .aurora span {
+  mix-blend-mode: screen;
+  opacity: 0.75;
+  filter: blur(45px);
+}
+[data-theme='chrome'] .aurora .a1 {
+  background: radial-gradient(circle, #aab6ff 0 42%, transparent 70%);
+}
+[data-theme='chrome'] .aurora .a2 {
+  background: radial-gradient(circle, #8b7bff 0 40%, transparent 68%);
+}
+/* Третий спан вместо блика работает слоем полос: чередование света и тени
+   поперёк экрана — то, из-за чего металл читается как металл, а не как дымка.
+   Наследованный drift медленно тянет полосы, и они «текут». */
+[data-theme='chrome'] .aurora .a3 {
+  left: -20%;
+  top: -20%;
+  width: 140%;
+  height: 140%;
+  bottom: auto;
+  border-radius: 0;
+  background: repeating-linear-gradient(
+    104deg,
+    rgba(5, 5, 12, 0) 0 20px,
+    rgba(198, 208, 242, 0.6) 30px,
+    rgba(8, 9, 20, 0.9) 45px,
+    rgba(242, 246, 255, 0.8) 60px,
+    rgba(6, 7, 15, 0.85) 74px,
+    rgba(120, 130, 180, 0.55) 90px,
+    rgba(4, 4, 10, 0) 112px
+  );
+  filter: blur(8px);
+  opacity: 0.38;
+}
+
+/* ── хромированные надписи ── */
+[data-theme='chrome'] .titlebar .brand,
+[data-theme='chrome'] .page-head h1,
+[data-theme='chrome'] .hero h2,
+[data-theme='chrome'] .empty b,
+[data-theme='chrome'] .modal header h3,
+/* Заголовок карточки — жирный текст первой строкой: «Сервер», «Всего передано» */
+[data-theme='chrome'] .card.pad > .row > b {
+  background: var(--chrome-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  font-weight: 700;
+  /* Тёмная подложка по контуру — без неё светлая часть букв тонет в фоне */
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.85)) drop-shadow(0 0 12px rgba(160, 176, 255, 0.25));
+}
+[data-theme='chrome'] .page-head h1 {
+  font-size: 21px;
+  letter-spacing: 2.2px;
+}
+[data-theme='chrome'] .card.pad > .row > b {
+  letter-spacing: 1.8px;
+}
+/* Единственный текст, лежащий прямо на металле, — подзаголовок страницы и
+   названия разделов. Тёмный ореол вокруг букв, как на технических врезках. */
+[data-theme='chrome'] .page-head p {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.3px;
+  line-height: 1.65;
+  color: #c6cde6;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 12px rgba(0, 0, 0, 0.85);
+}
+
+/* Заголовок раздела — строка спецификации: звезда, текст, уходящая в никуда линия */
+[data-theme='chrome'] .section-title {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 2.4px;
+  color: #cbd4f2;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 12px rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+[data-theme='chrome'] .section-title::before {
+  content: '';
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  background: var(--star) center / contain no-repeat;
+}
+[data-theme='chrome'] .section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(206, 218, 255, 0.35), transparent);
+}
+
+/* ── титульная панель и боковое меню ── */
+[data-theme='chrome'] .titlebar {
+  background: linear-gradient(180deg, rgba(22, 25, 40, 0.96), rgba(4, 4, 10, 0.94));
+  border-bottom: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 1px 0 rgba(206, 218, 255, 0.22);
+}
+[data-theme='chrome'] .titlebar .brand {
+  font-size: 12.5px;
+}
+[data-theme='chrome'] .titlebar .brand img {
+  border-radius: 2px;
+}
+[data-theme='chrome'] .tb-status {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+  border-radius: 2px;
+  background: var(--chrome);
+  border-color: rgba(206, 218, 255, 0.26);
+  box-shadow: var(--chrome-edge);
+}
+[data-theme='chrome'] .tb-status .dot {
+  border-radius: 0;
+  transform: rotate(45deg);
+  width: 6px;
+  height: 6px;
+}
+[data-theme='chrome'] .win-controls button:hover {
+  background: linear-gradient(180deg, rgba(226, 232, 255, 0.22), rgba(120, 132, 175, 0.08));
+  color: #fff;
+}
+
+[data-theme='chrome'] .sidebar {
+  background: linear-gradient(180deg, rgba(9, 11, 20, 0.94), rgba(3, 3, 8, 0.97));
+  border-right: none;
+  box-shadow: inset -1px 0 0 rgba(206, 218, 255, 0.16);
+}
+[data-theme='chrome'] .nav-item .lbl {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+[data-theme='chrome'] .nav-item {
+  border-radius: 2px;
+}
+[data-theme='chrome'] .nav-item .glow {
+  border-radius: 2px;
+  background: var(--chrome);
+  border: 1px solid rgba(206, 218, 255, 0.3);
+  box-shadow: var(--chrome-edge);
+}
+/* Активный пункт помечен звездой у правого края */
+[data-theme='chrome'] .nav-item.active::after {
+  content: '';
+  margin-left: auto;
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+  background: var(--star) center / contain no-repeat;
+  filter: drop-shadow(0 0 5px rgba(190, 205, 255, 0.8));
+}
+[data-theme='chrome'] .nav-item .badge {
+  font-family: var(--mono);
+  border-radius: 2px;
+  background: rgba(202, 214, 255, 0.12);
+}
+[data-theme='chrome'] .sidebar .foot {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+/* ── панели: тёмное стекло в металлической оправе ── */
+[data-theme='chrome'] .card,
+[data-theme='chrome'] .modal,
+[data-theme='chrome'] .app-row,
+[data-theme='chrome'] .node,
+[data-theme='chrome'] .rule,
+[data-theme='chrome'] .preset,
+[data-theme='chrome'] .theme-card {
+  position: relative;
+  background: linear-gradient(180deg, rgba(17, 19, 33, 0.88), rgba(4, 5, 11, 0.93));
+  border: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 18px 46px rgba(0, 0, 0, 0.7);
+}
+/* Оправа: градиентная рамка в пиксель, светлая по верхнему и нижнему краю */
+[data-theme='chrome'] .card::before,
+[data-theme='chrome'] .modal::before,
+[data-theme='chrome'] .app-row::before,
+[data-theme='chrome'] .node::before,
+[data-theme='chrome'] .rule::before,
+[data-theme='chrome'] .preset::before,
+[data-theme='chrome'] .theme-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.92),
+    rgba(150, 162, 206, 0.22) 40%,
+    rgba(255, 255, 255, 0.06) 52%,
+    rgba(206, 218, 255, 0.62)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+/* Уголки как на технической схеме — то, что превращает панель в спецификацию */
+[data-theme='chrome'] .card::after,
+[data-theme='chrome'] .modal::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  pointer-events: none;
+  --t: rgba(214, 226, 255, 0.45);
+  background:
+    linear-gradient(var(--t), var(--t)) 0 0 / 10px 1px no-repeat,
+    linear-gradient(var(--t), var(--t)) 0 0 / 1px 10px no-repeat,
+    linear-gradient(var(--t), var(--t)) 100% 0 / 10px 1px no-repeat,
+    linear-gradient(var(--t), var(--t)) 100% 0 / 1px 10px no-repeat,
+    linear-gradient(var(--t), var(--t)) 0 100% / 10px 1px no-repeat,
+    linear-gradient(var(--t), var(--t)) 0 100% / 1px 10px no-repeat,
+    linear-gradient(var(--t), var(--t)) 100% 100% / 10px 1px no-repeat,
+    linear-gradient(var(--t), var(--t)) 100% 100% / 1px 10px no-repeat;
+}
+
+/* ── кнопки, поля, переключатели ── */
+[data-theme='chrome'] .btn,
+[data-theme='chrome'] .select,
+[data-theme='chrome'] .input,
+[data-theme='chrome'] textarea.input,
+[data-theme='chrome'] .chip,
+[data-theme='chrome'] .seg,
+[data-theme='chrome'] .act-seg,
+[data-theme='chrome'] .color-pick,
+[data-theme='chrome'] .upd-badge {
+  background: var(--chrome);
+  border-color: rgba(206, 218, 255, 0.26);
+  box-shadow: var(--chrome-edge);
+}
+[data-theme='chrome'] .btn {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+[data-theme='chrome'] .btn:hover:not(:disabled) {
+  background: linear-gradient(
+    180deg,
+    rgba(240, 245, 255, 0.32) 0%,
+    rgba(150, 163, 210, 0.18) 47%,
+    rgba(10, 13, 24, 0.5) 50%,
+    rgba(140, 154, 205, 0.2) 76%,
+    rgba(230, 238, 255, 0.3) 100%
+  );
+  border-color: rgba(224, 232, 255, 0.45);
+}
+/* Главная кнопка — цельный отполированный металл с фиолетовым отсветом */
+[data-theme='chrome'] .btn.primary {
+  background: linear-gradient(
+    180deg,
+    #f6f8ff 0%,
+    #c2caea 42%,
+    #4e5488 50%,
+    #a3ade0 74%,
+    #eef2ff 100%
+  );
+  border-color: rgba(255, 255, 255, 0.55);
+  color: #0a0a14;
+  font-weight: 700;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+  box-shadow: inset 0 1px 0 #fff, 0 6px 20px color-mix(in oklab, var(--accent-2) 40%, transparent);
+}
+[data-theme='chrome'] .btn.primary:not(.icon)::before {
+  content: '';
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  background: var(--star) center / contain no-repeat;
+  filter: invert(1);
+}
+[data-theme='chrome'] .btn.ghost {
+  background: none;
+  box-shadow: none;
+  border-color: transparent;
+}
+[data-theme='chrome'] .btn.ghost:hover:not(:disabled) {
+  background: rgba(202, 214, 255, 0.1);
+}
+[data-theme='chrome'] .btn.danger {
+  background: linear-gradient(180deg, rgba(248, 113, 113, 0.22), rgba(30, 8, 12, 0.5) 52%, rgba(248, 113, 113, 0.18));
+}
+
+[data-theme='chrome'] .input,
+[data-theme='chrome'] textarea.input,
+[data-theme='chrome'] .logs,
+[data-theme='chrome'] .upd-notes {
+  background: rgba(3, 4, 9, 0.62);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8), inset 0 -1px 0 rgba(255, 255, 255, 0.12);
+}
+[data-theme='chrome'] .input:focus,
+[data-theme='chrome'] .select:focus,
+[data-theme='chrome'] textarea.input:focus {
+  border-color: rgba(226, 234, 255, 0.6);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(206, 218, 255, 0.25);
+}
+[data-theme='chrome'] .select option {
+  background: #090b14;
+}
+
+[data-theme='chrome'] .chip {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border-radius: 2px;
+}
+[data-theme='chrome'] .seg,
+[data-theme='chrome'] .act-seg {
+  border-radius: 3px;
+}
+[data-theme='chrome'] .seg button,
+[data-theme='chrome'] .act-seg button {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border-radius: 2px;
+}
+[data-theme='chrome'] .seg .pill,
+[data-theme='chrome'] .act-seg .pill {
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgba(240, 245, 255, 0.3), rgba(120, 132, 175, 0.12) 48%, rgba(10, 13, 24, 0.45) 52%, rgba(196, 208, 250, 0.22));
+  border: 1px solid rgba(206, 218, 255, 0.32);
+  box-shadow: var(--chrome-edge);
+}
+
+/* Переключатель — металлический ползунок в тёмном пазу */
+[data-theme='chrome'] .switch {
+  border-radius: 2px;
+  background: rgba(3, 4, 9, 0.7);
+  border-color: rgba(206, 218, 255, 0.24);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+[data-theme='chrome'] .switch i {
+  border-radius: 1px;
+  background: linear-gradient(180deg, #ffffff, #b9c2e2 46%, #5a6188 52%, #e6ecff);
+}
+[data-theme='chrome'] .switch.on {
+  background: linear-gradient(180deg, color-mix(in oklab, var(--accent-2) 55%, #0a0c18), color-mix(in oklab, var(--accent-1) 45%, #0a0c18));
+  border-color: rgba(226, 234, 255, 0.5);
+}
+[data-theme='chrome'] .switch.on i {
+  background: linear-gradient(180deg, #ffffff, #dfe6ff 46%, #8d95bd 52%, #ffffff);
+}
+
+/* ── кнопка подключения: хромированный шар в звезде ── */
+[data-theme='chrome'] .power::before {
+  content: '';
+  position: absolute;
+  inset: -8%;
+  background: var(--star) center / contain no-repeat;
+  opacity: 0.4;
+  filter: drop-shadow(0 0 18px rgba(190, 205, 255, 0.5));
+  animation: chrome-twinkle 6s ease-in-out infinite;
+  pointer-events: none;
+}
+[data-theme='chrome'] .power.on::before {
+  background: linear-gradient(155deg, var(--accent-1), var(--accent-2));
+  -webkit-mask: var(--star) center / contain no-repeat;
+  mask: var(--star) center / contain no-repeat;
+  opacity: 0.95;
+  filter: drop-shadow(0 0 26px color-mix(in oklab, var(--accent-1) 60%, transparent));
+}
+[data-theme='chrome'] .power .ring {
+  border-color: rgba(206, 218, 255, 0.22);
+}
+[data-theme='chrome'] .power button {
+  /* Чередование светлых и тёмных колец = отражения в полированном шаре */
+  background: radial-gradient(
+    130% 130% at 32% 16%,
+    #ffffff 0%,
+    #d3dbf6 12%,
+    #565e8c 34%,
+    #0b0d18 52%,
+    #7a85bd 70%,
+    #eef2ff 86%,
+    #2a2f4a 100%
+  );
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #0b0d18;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.6), 0 10px 34px rgba(0, 0, 0, 0.7);
+}
+[data-theme='chrome'] .power.on button {
+  background:
+    radial-gradient(130% 130% at 32% 16%, rgba(255, 255, 255, 0.95) 0%, transparent 42%),
+    radial-gradient(130% 130% at 32% 16%, var(--accent-1) 0%, color-mix(in oklab, var(--accent-2) 70%, #05060d) 58%, #05060d 100%);
+  color: #05060d;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.7), 0 0 52px -6px color-mix(in oklab, var(--accent-1) 70%, transparent);
+}
+
+/* ── цифры, графики, таблицы, журнал ── */
+[data-theme='chrome'] .stat {
+  background: rgba(5, 6, 13, 0.7);
+}
+[data-theme='chrome'] .stat .k {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.4px;
+}
+[data-theme='chrome'] .stat .v {
+  background: linear-gradient(180deg, #ffffff, #aab3d6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+[data-theme='chrome'] .stat-grid {
+  background: rgba(206, 218, 255, 0.16);
+}
+[data-theme='chrome'] .graph .legend,
+[data-theme='chrome'] .graph .scale,
+[data-theme='chrome'] .graph .tip {
+  font-family: var(--mono);
+  letter-spacing: 0.6px;
+}
+[data-theme='chrome'] .table th {
+  font-family: var(--mono);
+  letter-spacing: 1.2px;
+  background: linear-gradient(180deg, rgba(24, 27, 43, 0.96), rgba(6, 8, 15, 0.96));
+  color: #b6bfdd;
+}
+[data-theme='chrome'] .logs {
+  background: rgba(2, 3, 7, 0.78);
+}
+
+/* ── модалка, уведомления, обновления ── */
+[data-theme='chrome'] .backdrop {
+  background: rgba(2, 3, 8, 0.72);
+}
+[data-theme='chrome'] .modal header,
+[data-theme='chrome'] .modal footer {
+  border-color: rgba(206, 218, 255, 0.16);
+}
+[data-theme='chrome'] .modal header h3 {
+  font-size: 14px;
+  letter-spacing: 1.8px;
+}
+[data-theme='chrome'] .toast {
+  background: linear-gradient(180deg, rgba(24, 27, 43, 0.95), rgba(5, 6, 13, 0.95));
+  border-color: rgba(206, 218, 255, 0.3);
+  box-shadow: var(--chrome-edge), var(--shadow);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.4px;
+}
+[data-theme='chrome'] .upd-dot {
+  font-family: var(--mono);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border-radius: 2px;
+}
+/* Пункты «что нового» помечены звёздами, а не квадратами */
+[data-theme='chrome'] .whatsnew li::before {
+  background: linear-gradient(155deg, var(--accent-1), var(--accent-2));
+  -webkit-mask: var(--star) center / contain no-repeat;
+  mask: var(--star) center / contain no-repeat;
+  border-radius: 0;
+  width: 11px;
+  height: 11px;
+  top: 4px;
+  left: 0;
+}
+[data-theme='chrome'] .whatsnew .date {
+  font-family: var(--mono);
+  letter-spacing: 1.4px;
+}
+
+/* ── выбор темы и акцента ── */
+[data-theme='chrome'] .theme-card .name {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+[data-theme='chrome'] .theme-card.active {
+  box-shadow: 0 0 0 1px rgba(226, 234, 255, 0.55), 0 14px 40px rgba(0, 0, 0, 0.55);
+}
+[data-theme='chrome'] .accent-dot,
+[data-theme='chrome'] .theme-preview {
+  border-radius: 2px;
 }

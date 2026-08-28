@@ -30,6 +30,8 @@ export interface BootstrapInfo {
   elevated: boolean
   isWindows: boolean
   appVersion: string
+  /** Версия, для которой окно «что изменилось» уже показывали */
+  seenVersion?: string
   coreVersion: string
   autoStartTask: boolean
 }
@@ -108,7 +110,8 @@ const api = {
     state: () => invoke<UpdateState>('update:state'),
     check: () => invoke<UpdateState>('update:check'),
     download: () => invoke<UpdateState>('update:download'),
-    install: () => invoke<boolean>('update:install')
+    install: () => invoke<boolean>('update:install'),
+    markSeen: () => invoke<void>('update:seen')
   },
 
   window: {

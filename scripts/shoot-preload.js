@@ -182,7 +182,8 @@ window.prism = {
     platform: 'win32',
     elevated: true,
     isWindows: true,
-    appVersion: '1.0.0',
+    // Подставив PRISM_APP_VERSION с номером из CHANGELOG, снимем окно «что нового»
+    appVersion: process.env.PRISM_APP_VERSION || '1.0.0',
     coreVersion: '1.13.15',
     autoStartTask: true
   }),
@@ -238,7 +239,8 @@ window.prism = {
     state: async () => updateState,
     check: async () => updateState,
     download: async () => updateState,
-    install: async () => true
+    install: async () => true,
+    markSeen: async () => {}
   },
 
   window: {

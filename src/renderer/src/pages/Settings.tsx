@@ -27,38 +27,48 @@ const THEMES: { id: ThemeName; label: string; hint: string }[] = [
   { id: 'glass', label: 'Liquid Glass', hint: 'Матовое стекло' },
   { id: 'win95', label: 'Windows 95', hint: 'Серый пластик и бирюза' },
   { id: 'frutiger', label: 'Frutiger Aero', hint: 'Небо, вода и мокрый глянец' },
-  { id: 'cats', label: 'Котики', hint: 'Розовая, с настоящими котятами' }
+  { id: 'cats', label: 'Котики', hint: 'Розовая, с настоящими котятами' },
+  { id: 'chrome', label: 'Хром', hint: 'Жидкий металл и звёзды нулевых' }
 ]
+
+/** Четырёхлучевая звезда темы «Хром» — та же, что в styles.css */
+const STAR =
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 0C53.5 35 65 46.5 100 50 65 53.5 53.5 65 50 100 46.5 65 35 53.5 0 50 35 46.5 46.5 35 50 0Z' fill='%23fff'/%3E%3C/svg%3E\")"
+
+interface Skin {
+  bg: string
+  bar: string
+  card: string
+  line: string
+  radius: number
+}
+
+const SKINS: Record<ThemeName, Skin> = {
+  dark: { bg: 'linear-gradient(160deg,#0e1421,#070a11)', bar: 'rgba(255,255,255,.07)', card: 'rgba(255,255,255,.07)', line: 'rgba(255,255,255,.16)', radius: 4 },
+  light: { bg: 'linear-gradient(160deg,#f7f9fc,#e8ecf4)', bar: 'rgba(15,23,42,.06)', card: '#fff', line: 'rgba(15,23,42,.14)', radius: 4 },
+  aero: { bg: 'linear-gradient(170deg,#a9cff0,#4f86c6)', bar: 'rgba(255,255,255,.65)', card: 'rgba(255,255,255,.8)', line: 'rgba(11,42,92,.3)', radius: 2 },
+  glass: { bg: 'radial-gradient(120% 100% at 15% 0%, #3b82f6 0%, #7c3aed 55%, #0a0f1c 100%)', bar: 'rgba(255,255,255,.14)', card: 'rgba(255,255,255,.16)', line: 'rgba(255,255,255,.3)', radius: 7 },
+  win95: { bg: '#008080', bar: 'linear-gradient(90deg,#000080,#1084d0)', card: '#c0c0c0', line: '#808080', radius: 0 },
+  frutiger: {
+    bg: 'radial-gradient(120% 70% at 50% 112%, #86e05a 0%, #46c06d 20%, rgba(70,192,109,0) 52%), linear-gradient(180deg,#d8f6ff,#8fddf7 40%,#46b6e8 100%)',
+    bar: 'rgba(255,255,255,.7)',
+    card: 'rgba(255,255,255,.82)',
+    line: 'rgba(255,255,255,.95)',
+    radius: 8
+  },
+  cats: { bg: 'linear-gradient(165deg,#ffd9ea,#ffb0d4)', bar: 'rgba(255,255,255,.85)', card: 'rgba(255,255,255,.92)', line: 'rgba(255,158,203,.7)', radius: 9 },
+  chrome: {
+    bg: 'conic-gradient(from 200deg at 42% 44%, #05050c, #c6d0f2 11%, #0a0a16 24%, #666e9e 37%, #04040a 51%, #e6ecff 66%, #090914 79%, #8b96cc 91%, #05050c)',
+    bar: 'rgba(214,226,255,.16)',
+    card: 'rgba(8,10,20,.66)',
+    line: 'rgba(214,226,255,.5)',
+    radius: 1
+  }
+}
 
 /** Маленький макет окна — понятнее, чем название темы в списке */
 function ThemePreview({ id }: { id: ThemeName }): JSX.Element {
-  const skin =
-    id === 'dark'
-      ? { bg: 'linear-gradient(160deg,#0e1421,#070a11)', bar: 'rgba(255,255,255,.07)', card: 'rgba(255,255,255,.07)', line: 'rgba(255,255,255,.16)', radius: 4 }
-      : id === 'light'
-        ? { bg: 'linear-gradient(160deg,#f7f9fc,#e8ecf4)', bar: 'rgba(15,23,42,.06)', card: '#fff', line: 'rgba(15,23,42,.14)', radius: 4 }
-        : id === 'aero'
-          ? { bg: 'linear-gradient(170deg,#a9cff0,#4f86c6)', bar: 'rgba(255,255,255,.65)', card: 'rgba(255,255,255,.8)', line: 'rgba(11,42,92,.3)', radius: 2 }
-          : id === 'glass'
-            ? { bg: 'radial-gradient(120% 100% at 15% 0%, #3b82f6 0%, #7c3aed 55%, #0a0f1c 100%)', bar: 'rgba(255,255,255,.14)', card: 'rgba(255,255,255,.16)', line: 'rgba(255,255,255,.3)', radius: 7 }
-            : id === 'win95'
-              ? { bg: '#008080', bar: 'linear-gradient(90deg,#000080,#1084d0)', card: '#c0c0c0', line: '#808080', radius: 0 }
-              : id === 'frutiger'
-                ? {
-                    bg: 'radial-gradient(120% 70% at 50% 112%, #86e05a 0%, #46c06d 20%, rgba(70,192,109,0) 52%), linear-gradient(180deg,#d8f6ff,#8fddf7 40%,#46b6e8 100%)',
-                    bar: 'rgba(255,255,255,.7)',
-                    card: 'rgba(255,255,255,.82)',
-                    line: 'rgba(255,255,255,.95)',
-                    radius: 8
-                  }
-                : {
-                    bg: 'linear-gradient(165deg,#ffd9ea,#ffb0d4)',
-                    bar: 'rgba(255,255,255,.85)',
-                    card: 'rgba(255,255,255,.92)',
-                    line: 'rgba(255,158,203,.7)',
-                    radius: 9
-                  }
-
+  const skin = SKINS[id]
   const glossy = id === 'aero'
   return (
     <span className="theme-preview" style={{ background: skin.bg }}>
@@ -67,6 +77,16 @@ function ThemePreview({ id }: { id: ThemeName }): JSX.Element {
           src={catPreview}
           alt=""
           style={{ position: 'absolute', left: 9, top: 20, width: 22, height: 22, borderRadius: '50%', objectFit: 'cover', zIndex: 1 }}
+        />
+      )}
+      {id === 'chrome' && (
+        <span
+          style={{
+            position: 'absolute', right: 12, top: 24, width: 26, height: 26, zIndex: 1,
+            background: '#fff', WebkitMaskImage: STAR, maskImage: STAR,
+            WebkitMaskSize: 'contain', maskSize: 'contain', WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
+            filter: 'drop-shadow(0 0 6px rgba(190,205,255,.9))'
+          }}
         />
       )}
       <span style={{ position: 'absolute', inset: 0, height: 11, background: skin.bar, borderBottom: `1px solid ${skin.line}` }} />
@@ -82,7 +102,9 @@ function ThemePreview({ id }: { id: ThemeName }): JSX.Element {
           border: glossy ? '1px solid color-mix(in srgb, var(--accent-1) 65%, #000)' : 'none',
           background: glossy
             ? 'linear-gradient(180deg, color-mix(in srgb, var(--accent-1) 40%, #fff) 0%, color-mix(in srgb, var(--accent-1) 85%, #fff) 48%, color-mix(in srgb, var(--accent-1) 90%, #000) 52%, color-mix(in srgb, var(--accent-1) 65%, #fff) 100%)'
-            : 'linear-gradient(90deg, var(--accent-1), var(--accent-2))'
+            : id === 'chrome'
+              ? 'linear-gradient(180deg,#f6f8ff,#c2caea 42%,#4e5488 50%,#a3ade0 74%,#eef2ff)'
+              : 'linear-gradient(90deg, var(--accent-1), var(--accent-2))'
         }}
       />
       <span

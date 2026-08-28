@@ -223,7 +223,8 @@ const ACCENTS: Record<string, [string, string]> = {
 
 /** У некоторых тем свой акцент по умолчанию — свой выбор пользователя всё равно главнее */
 const THEME_ACCENT: Partial<Record<Settings['theme'], [string, string]>> = {
-  cats: ['#ff7fbe', '#ffa8d5']
+  cats: ['#ff7fbe', '#ffa8d5'],
+  chrome: ['#cfd8ff', '#8b7bff']
 }
 
 export function applyTheme(s: Settings): void {

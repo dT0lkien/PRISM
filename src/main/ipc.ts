@@ -159,6 +159,7 @@ export function registerIpc(): void {
       elevated: await isElevated(),
       isWindows: IS_WIN,
       appVersion: app.getVersion(),
+      seenVersion: store.get().seenVersion,
       coreVersion,
       autoStartTask: await hasAutoStartTask()
     }
@@ -184,6 +185,11 @@ export function registerIpc(): void {
   h('update:check', () => updater.check())
   h('update:download', () => updater.download())
   h('update:install', () => updater.install())
+  /* Окно «что изменилось» показано — больше для этой версии не показываем.
+     StoreData целиком не возвращаем: в нём ключи серверов и clashSecret. */
+  h('update:seen', () => {
+    store.patch({ seenVersion: app.getVersion() })
+  })
 
   /* — настройки — */
   h('settings:update', async (patch: Partial<Settings>) => {

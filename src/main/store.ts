@@ -15,6 +15,8 @@ export interface StoreData {
   activeNodeId?: string
   clashSecret: string
   totals: { up: number; down: number }
+  /** Версия, для которой уже показали окно «что изменилось» */
+  seenVersion?: string
   /** Сохранённые настройки системного прокси до нашего вмешательства */
   savedProxy?: { enable: string; server: string; override: string }
 }
