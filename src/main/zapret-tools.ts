@@ -33,12 +33,16 @@ async function quiet(cmd: string, args: string[]): Promise<boolean> {
   }
 }
 
-const toArr = <T>(v: T | T[] | null | undefined): T[] => (Array.isArray(v) ? v : v == null ? [] : [v])
+/* Имена служб из PowerShell: одно имя приходит строкой, пустота — null или {}.
+   В 1.6.0 пустой {} считался «нашлась одна служба», и диагностика показывала
+   всем конфликт с Killer, Check Point и SmartByte, которых у них нет. */
+const names = (v: unknown): string[] => (Array.isArray(v) ? v : [v]).filter((x): x is string => typeof x === 'string' && x !== '')
 
 /* ─────────────────────────── диагностика ─────────────────────────── */
 
 const DIAG_SCRIPT = String.raw`
 $ErrorActionPreference = 'SilentlyContinue'
+$ProgressPreference = 'SilentlyContinue'
 $running = @(Get-Service | Where-Object { $_.Status -eq 'Running' })
 function Find($re) { @($running | Where-Object { ($_.Name + ' ' + $_.DisplayName) -match $re } | ForEach-Object { [string]$_.Name }) }
 $inet = Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
@@ -51,11 +55,11 @@ $facts = @{
   proxyServer = [string]$inet.ProxyServer
   tcp = [string]((cmd /c 'chcp 437 >nul & netsh interface tcp show global') -join ' ')
   adguard = @(Get-Process -Name AdguardSvc).Count
-  killer = Find 'Killer'
+  killer = @(Find 'Killer')
   intel = @($running | Where-Object { $n = $_.Name + ' ' + $_.DisplayName; $n -match 'Intel' -and $n -match 'Connectivity' -and $n -match 'Network' } | ForEach-Object { [string]$_.Name })
-  checkpoint = Find 'TracSrvWrapper|EPWD'
-  smartbyte = Find 'SmartByte'
-  vpn = Find 'VPN'
+  checkpoint = @(Find 'TracSrvWrapper|EPWD')
+  smartbyte = @(Find 'SmartByte')
+  vpn = @(Find 'VPN')
   doh = $doh
   hostsYoutube = [bool]($hosts -match 'youtube\.com|youtu\.be')
   winws = @(Get-Process -Name winws).Count
@@ -137,16 +141,16 @@ export async function runDiagnostics(opts: { root: string; packDir?: string; loc
   const conflict = (id: string, names: string[], title: string, detail: string, link?: string): void =>
     add(names.length ? { id, level: 'error', title, detail: `${detail} Службы: ${names.join(', ')}.`, link } : { id, level: 'ok', title: `${title.replace(/ конфликту.*$/, '')} — не найдено` })
 
-  conflict('killer', toArr(f.killer), 'Службы Killer конфликтуют с zapret', 'Отключите или удалите Killer Network.', `${ISSUES}/2512#issuecomment-2821119513`)
+  conflict('killer', names(f.killer), 'Службы Killer конфликтуют с zapret', 'Отключите или удалите Killer Network.', `${ISSUES}/2512#issuecomment-2821119513`)
   conflict(
     'intel',
-    toArr(f.intel),
+    names(f.intel),
     'Intel Connectivity Network Service конфликтует с zapret',
     'Отключите службу в services.msc.',
     'https://github.com/ValdikSS/GoodbyeDPI/issues/541#issuecomment-2661670982'
   )
-  conflict('checkpoint', toArr(f.checkpoint), 'Службы Check Point конфликтуют с zapret', 'Попробуйте удалить Check Point.')
-  conflict('smartbyte', toArr(f.smartbyte), 'SmartByte конфликтует с zapret', 'Удалите SmartByte или отключите его в services.msc.')
+  conflict('checkpoint', names(f.checkpoint), 'Службы Check Point конфликтуют с zapret', 'Попробуйте удалить Check Point.')
+  conflict('smartbyte', names(f.smartbyte), 'SmartByte конфликтует с zapret', 'Удалите SmartByte или отключите его в services.msc.')
 
   if (/[а-яё]/i.test(opts.root)) {
     add({ id: 'path', level: 'warn', title: 'В пути к zapret есть кириллица', detail: opts.root })
@@ -170,7 +174,7 @@ export async function runDiagnostics(opts: { root: string; packDir?: string; loc
     )
   }
 
-  const vpn = toArr(f.vpn)
+  const vpn = names(f.vpn)
   add(
     vpn.length
       ? { id: 'vpn', level: 'warn', title: `Найдены службы VPN: ${vpn.join(', ')}`, detail: 'Некоторые VPN конфликтуют с zapret — на время проверки выключите их.' }
@@ -204,7 +208,7 @@ export async function runDiagnostics(opts: { root: string; packDir?: string; loc
     })
   }
 
-  const conflicts = toArr(f.conflicts)
+  const conflicts = names(f.conflicts)
   if (conflicts.length) {
     add({
       id: 'conflicts',

@@ -63,6 +63,8 @@ jobs:
       - run: npm ci
       - name: Скачать ядро и wintun
         run: node scripts/fetch-resources.mjs
+      - name: Zapret на настоящей Windows — права на каталог и запуск winws.exe
+        run: node scripts/run-zapret-test.mjs
       - name: Собрать
         run: npm run build
       - name: Упаковать .exe

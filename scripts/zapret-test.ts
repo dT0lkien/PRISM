@@ -3,6 +3,7 @@
    гоняется на настоящем релизе Flowseal — если сборка поменяет формат, тест
    это заметит раньше пользователей. */
 
+import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -98,6 +99,13 @@ function zip(files: Record<string, string | Buffer>): Buffer {
 }
 
 async function main(): Promise<void> {
+  /* Второй процесс для проверки на Windows: так моделируется новый запуск
+     Prism, который заново настраивает права на уже установленную сборку */
+  if (process.env.ZAPRET_TEST_REOPEN) {
+    store.load()
+    await zapret.init()
+    process.exit(0)
+  }
   /* ─────────────────────────── разбор стратегии ─────────────────────────── */
 
   console.log('\n▸ Разбор bat-файла стратегии')
@@ -283,6 +291,22 @@ async function main(): Promise<void> {
       }
     }
     ok('все стратегии собираются в аргументы, файлы на месте', broken.length === 0, broken.slice(0, 3).join('; '))
+
+    if (process.platform === 'win32') {
+      /* В 1.6.0 повторная настройка прав оставляла файлы сборки с пустым
+         списком доступа, и winws.exe не запускался даже от администратора */
+      console.log('\n▸ Windows: winws.exe запускается после повторного запуска Prism')
+      const again = spawnSync(process.execPath, [process.argv[1]], {
+        env: { ...process.env, ZAPRET_TEST_REOPEN: '1' },
+        encoding: 'utf8',
+        timeout: 120_000
+      })
+      ok('повторный запуск прошёл', again.status === 0, `${again.stderr ?? ''}`.trim().split('\n')[0])
+      const exe = join(zapretPaths.packs, s.pack!.version, 'bin', 'winws.exe')
+      const r = spawnSync(exe, ['--help'], { timeout: 3000, windowsHide: true })
+      const code = (r.error as NodeJS.ErrnoException | undefined)?.code
+      ok('winws.exe запускается', code !== 'EPERM' && code !== 'EACCES', code ?? 'без ошибок запуска')
+    }
   } catch (e) {
     console.log(`  ⚠ пропущено: ${(e as Error).message}`)
   }

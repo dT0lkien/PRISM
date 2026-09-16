@@ -13,6 +13,15 @@ export interface ReleaseNote {
 
 export const CHANGELOG: ReleaseNote[] = [
   {
+    version: '1.6.1',
+    date: '2026-09-17',
+    items: [
+      'Zapret запускается: в 1.6.0 после перезапуска Prism Windows не давала открыть winws.exe',
+      'Сломанная установка чинится сама — сборку перекачивать не нужно',
+      'Диагностика больше не находит у всех Killer, Check Point и SmartByte, которых нет'
+    ]
+  },
+  {
     version: '1.6.0',
     date: '2026-09-16',
     items: [
