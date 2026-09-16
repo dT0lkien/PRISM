@@ -44,7 +44,7 @@ export const DEFAULT_BYPASS = [
   '<local>'
 ].join(';')
 
-async function ps(script: string, timeout = 20000): Promise<string> {
+export async function ps(script: string, timeout = 20000): Promise<string> {
   const { stdout } = await exec(
     'powershell.exe',
     ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
@@ -52,6 +52,26 @@ async function ps(script: string, timeout = 20000): Promise<string> {
   )
   return stdout
 }
+
+/**
+ * PowerShell для скриптов, которые возвращают данные. Скрипт уходит через
+ * -EncodedCommand — без сюрпризов с кавычками и переводами строк, — а вывод
+ * переключается на UTF-8: иначе имена служб, пути с кириллицей и системные
+ * сообщения приезжают в OEM-кодировке и превращаются в кракозябры.
+ * Кодировку ставим в самом конце: cmd с chcp внутри скрипта её сбил бы.
+ */
+export async function psUtf8(script: string, timeout = 30000, env?: Record<string, string>): Promise<string> {
+  const encoded = Buffer.from(script, 'utf16le').toString('base64')
+  const { stdout } = await exec(
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+    { timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024, encoding: 'utf8', env: env ? { ...process.env, ...env } : undefined }
+  )
+  return stdout
+}
+
+/** Строка, которая переключает вывод PowerShell на UTF-8 — ставить прямо перед выводом результата */
+export const PS_UTF8 = '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8'
 
 /* ─────────────────────────── права ─────────────────────────── */
 
@@ -357,6 +377,16 @@ export function emergencyCleanupSync(pid: number | undefined, restore?: ProxySta
     run('reg', ['add', INET_KEY, '/v', 'ProxyEnable', '/t', 'REG_DWORD', '/d', '1', '/f'])
   } else {
     run('reg', ['add', INET_KEY, '/v', 'ProxyEnable', '/t', 'REG_DWORD', '/d', '0', '/f'])
+  }
+}
+
+/** Синхронно добить процесс с потомками — для уборки на выключении Windows */
+export function killPidSync(pid: number | undefined): void {
+  if (!IS_WIN || !pid) return
+  try {
+    execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, timeout: 4000, stdio: 'ignore' })
+  } catch {
+    /* уже завершился */
   }
 }
 

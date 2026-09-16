@@ -13,7 +13,8 @@ import {
   Zap,
   Activity,
   Server,
-  ShieldAlert
+  ShieldAlert,
+  LockOpen
 } from 'lucide-react'
 import { bytes, duration, speed, useStore } from '../store'
 import { Modal, Ping, Segmented, Switch, spring } from '../ui'
@@ -27,7 +28,7 @@ const ROUTING_LABELS: Record<RoutingMode, { label: string; hint: string }> = {
 }
 
 export default function Dashboard(): JSX.Element {
-  const { core, snap, traffic, totals, session, toggle, busy, patchSettings, setPage, info } = useStore()
+  const { core, snap, traffic, totals, session, toggle, busy, patchSettings, setPage, info, zapret, toast } = useStore()
   const [uptime, setUptime] = useState(0)
   const [elevAsk, setElevAsk] = useState(false)
 
@@ -200,6 +201,25 @@ export default function Dashboard(): JSX.Element {
               on={snap.settings.bypassPrivate}
               onChange={(v) => patchSettings({ bypassPrivate: v })}
             />
+            {zapret.supported && (
+              <Quick
+                icon={<LockOpen size={15} />}
+                title="Zapret"
+                hint={
+                  zapret.service.installed
+                    ? 'Обход работает службой Windows — управление на вкладке «Zapret»'
+                    : 'Обход блокировок без VPN: Discord и YouTube напрямую через провайдера'
+                }
+                on={zapret.status === 'running' || /running/i.test(zapret.service.state ?? '')}
+                onChange={async (v) => {
+                  // Без сборки, прав или при установленной службе переключателю нечего делать — ведём на вкладку
+                  if (!zapret.pack || !zapret.elevated || zapret.service.installed) return setPage('zapret')
+                  if (!v) return void window.prism.zapret.stop()
+                  const r = await window.prism.zapret.start()
+                  if (!r.ok && r.error) toast('error', r.error)
+                }}
+              />
+            )}
           </div>
 
           <div className="card pad">

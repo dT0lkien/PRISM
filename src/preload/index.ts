@@ -10,7 +10,15 @@ import type {
   ServerNode,
   Settings,
   Subscription,
-  TrafficSample, UpdateState } from '@shared/types'
+  TrafficSample,
+  UpdateState,
+  ZapretCheck,
+  ZapretConfig,
+  ZapretHostsInfo,
+  ZapretState,
+  ZapretTestKind,
+  ZapretTestProgress
+} from '@shared/types'
 
 export interface Snapshot {
   settings: Settings
@@ -21,7 +29,11 @@ export interface Snapshot {
   enabledPresets: string[]
   activeNodeId?: string
   totals: { up: number; down: number }
+  zapret: ZapretConfig
 }
+
+/** Ответ действия, которое может не получиться: ошибка приходит полем, а не исключением */
+export type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string }
 
 export interface BootstrapInfo {
   snapshot: Snapshot
@@ -114,6 +126,36 @@ const api = {
     markSeen: () => invoke<void>('update:seen')
   },
 
+  zapret: {
+    state: () => invoke<ZapretState>('zapret:state'),
+    refresh: () => invoke<ZapretState>('zapret:refresh'),
+    start: (strategy?: string) => invoke<{ ok: boolean; error?: string; needElevation?: boolean }>('zapret:start', strategy),
+    stop: () => invoke<void>('zapret:stop'),
+    config: (patch: Partial<ZapretConfig>) => invoke<Snapshot>('zapret:config', patch),
+    installService: (strategy?: string) => invoke<Result>('zapret:installService', strategy),
+    removeService: () => invoke<Result>('zapret:removeService'),
+    killForeign: () => invoke<Result>('zapret:killForeign'),
+    checkUpdate: () => invoke<ZapretState>('zapret:checkUpdate'),
+    installLatest: () => invoke<Result>('zapret:installLatest'),
+    installFromFile: () => invoke<Result<{ version: string }>>('zapret:installFromFile'),
+    updateIpset: () => invoke<Result<{ count: number }>>('zapret:updateIpset'),
+    readList: (name: 'general' | 'google' | 'exclude' | 'ipsetExclude' | 'ipset') =>
+      invoke<{ lines: string[]; total: number }>('zapret:readList', name),
+    diagnostics: () => invoke<Result<{ checks: ZapretCheck[] }>>('zapret:diagnostics'),
+    fix: (fix: NonNullable<ZapretCheck['fix']>) => invoke<Result<{ message: string }>>('zapret:fix', fix),
+    clearDiscord: () => invoke<Result<{ found: string[]; failed: string[] }>>('zapret:clearDiscord'),
+    resetNetwork: () => invoke<Result>('zapret:resetNetwork'),
+    hosts: () => invoke<Result<{ info: ZapretHostsInfo }>>('zapret:hosts'),
+    hostsApply: () => invoke<Result<{ info: ZapretHostsInfo }>>('zapret:hostsApply'),
+    hostsRemove: () => invoke<Result<{ info: ZapretHostsInfo }>>('zapret:hostsRemove'),
+    testStart: (kind: ZapretTestKind, ids: string[]) => invoke<Result>('zapret:testStart', kind, ids),
+    testCancel: () => invoke<void>('zapret:testCancel'),
+    testState: () => invoke<ZapretTestProgress | null>('zapret:testState'),
+    report: () => invoke<string>('zapret:report'),
+    openReports: () => invoke<void>('zapret:openReports'),
+    openRoot: () => invoke<void>('zapret:openRoot')
+  },
+
   window: {
     minimize: () => invoke<void>('window:minimize'),
     maximize: () => invoke<void>('window:maximize'),
@@ -132,7 +174,9 @@ const api = {
     onToast: (cb: (t: { kind: 'ok' | 'warn' | 'error'; text: string }) => void) =>
       on<{ kind: 'ok' | 'warn' | 'error'; text: string }>('evt:toast', cb),
     onMaximize: (cb: (v: boolean) => void) => on<boolean>('evt:maximize', cb),
-    onUpdate: (cb: (u: UpdateState) => void) => on<UpdateState>('evt:update', cb)
+    onUpdate: (cb: (u: UpdateState) => void) => on<UpdateState>('evt:update', cb),
+    onZapret: (cb: (z: ZapretState) => void) => on<ZapretState>('evt:zapret', cb),
+    onZapretTest: (cb: (t: ZapretTestProgress) => void) => on<ZapretTestProgress>('evt:zapretTest', cb)
   }
 }
 

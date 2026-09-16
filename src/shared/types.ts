@@ -221,7 +221,7 @@ export interface LogEntry {
   level: string
   message: string
   t: number
-  source: 'core' | 'app'
+  source: 'core' | 'app' | 'zapret'
 }
 
 export interface ConnectionItem {
@@ -262,4 +262,172 @@ export interface DetectedApp {
   path: string
   icon?: string
   running: boolean
+}
+
+/* ─────────────────────────── Zapret ─────────────────────────── */
+/* Обход DPI без VPN на основе сборки Flowseal/zapret-discord-youtube.
+   Работает только в Windows: пакеты перехватывает драйвер WinDivert. */
+
+/** Обход для игр — порты выше 1023. off — выключен */
+export type ZapretGameFilter = 'off' | 'all' | 'tcp' | 'udp'
+/** Кого ловит ipset: none — никого, loaded — адреса из списка, any — любой IP */
+export type ZapretIpsetMode = 'none' | 'loaded' | 'any'
+
+/** Свои списки пользователя — то, что в сборке лежит в *-user.txt */
+export interface ZapretLists {
+  /** Домены для обхода, поддомены учитываются сами */
+  general: string[]
+  /** Домены, которые обходить не надо */
+  exclude: string[]
+  /** Свои IP и подсети — дописываются к ipset-all.txt */
+  ipset: string[]
+  /** IP и подсети, которые обходить не надо */
+  ipsetExclude: string[]
+}
+
+export interface ZapretConfig {
+  /** Стратегия — имя .bat из сборки без расширения, напр. «general (ALT5)» */
+  strategy: string
+  gameFilter: ZapretGameFilter
+  ipsetMode: ZapretIpsetMode
+  /** Фейк для голоса Discord — имя .bin из сборки; пусто — как задумано в сборке */
+  fakeDiscord: string
+  /** Фейк для UDP игр */
+  fakeGame: string
+  /** Поднимать обход при запуске Prism */
+  autoStart: boolean
+  /** Проверять, не вышла ли новая сборка стратегий */
+  checkUpdates: boolean
+  lists: ZapretLists
+}
+
+export interface ZapretStrategy {
+  /** Имя файла без .bat */
+  id: string
+  /** Коротко: general, ALT5, FAKE TLS AUTO */
+  label: string
+  /** Чем обманывает DPI — собрано из аргументов */
+  summary: string
+}
+
+export interface ZapretPack {
+  version: string
+  strategies: ZapretStrategy[]
+  /** Файлы фейков из bin без расширения, кроме ACTIVE_* */
+  fakes: string[]
+  /** Какой фейк сборка ставит по умолчанию — по совпадению содержимого */
+  defaultFakeDiscord?: string
+  defaultFakeGame?: string
+  /** Размеры встроенных списков */
+  lists: { general: number; google: number; exclude: number; ipsetExclude: number; ipset: number }
+  /** Когда ipset обновлялся с GitHub; не задано — список из сборки */
+  ipsetUpdatedAt?: number
+}
+
+export type ZapretStatus = 'stopped' | 'starting' | 'running' | 'error'
+
+export interface ZapretState {
+  /** Windows — единственная платформа, где это работает */
+  supported: boolean
+  elevated: boolean
+  /** Каталог, где лежат сборки и рабочие списки */
+  root: string
+  /** Сборка не установлена — undefined */
+  pack?: ZapretPack
+  status: ZapretStatus
+  /** Какая стратегия запущена сейчас */
+  running?: string
+  since?: number
+  error?: string
+  /** Последние строки вывода winws.exe */
+  output: string[]
+  service: {
+    installed: boolean
+    /** Running, Stopped, Stop Pending… */
+    state?: string
+    strategy?: string
+    /** Служба смотрит не в каталог Prism — её ставил service.bat или другая сборка */
+    foreign?: boolean
+  }
+  /** Драйвер WinDivert загружен */
+  windivert?: string
+  /** Сколько запущено winws.exe, которые запускал не Prism */
+  foreignWinws: number
+  update: {
+    checking?: boolean
+    installing?: boolean
+    latest?: string
+    checkedAt?: number
+    error?: string
+  }
+  /** Итог последнего теста стратегий */
+  lastTest?: ZapretTestSummary
+}
+
+export type ZapretTestKind = 'standard' | 'dpi'
+export type ZapretCheckStatus = 'ok' | 'error' | 'ssl' | 'unsup' | 'blocked' | 'fail'
+
+export interface ZapretTargetResult {
+  name: string
+  checks: { label: string; status: ZapretCheckStatus; detail?: string }[]
+  /** «12 мс», «Timeout» или undefined для DPI-проверок */
+  ping?: string
+}
+
+export interface ZapretStrategyResult {
+  strategy: string
+  /** winws.exe поднялся с этой стратегией */
+  started: boolean
+  ok: number
+  error: number
+  unsup: number
+  blocked: number
+  pingOk: number
+  pingFail: number
+  targets: ZapretTargetResult[]
+}
+
+export interface ZapretTestProgress {
+  running: boolean
+  kind: ZapretTestKind
+  total: number
+  done: number
+  current?: string
+  results: ZapretStrategyResult[]
+  best?: string
+  error?: string
+  /** Куда сохранён отчёт */
+  file?: string
+  finishedAt?: number
+}
+
+export interface ZapretTestSummary {
+  kind: ZapretTestKind
+  at: number
+  best?: string
+  /** стратегия → «сколько проверок прошло из скольких» */
+  scores: Record<string, { ok: number; total: number }>
+}
+
+export interface ZapretCheck {
+  id: string
+  level: 'ok' | 'warn' | 'error'
+  title: string
+  detail?: string
+  link?: string
+  /** Prism умеет починить сам */
+  fix?: 'tcp-timestamps' | 'remove-windivert' | 'remove-conflicts'
+}
+
+export interface ZapretHostsInfo {
+  /** Все адреса из списка уже в hosts */
+  upToDate: boolean
+  total: number
+  missing: number
+  /** Строк вне блока Prism для тех же имён — заменятся при обновлении */
+  stale: number
+  /** В hosts есть блок, который добавил Prism */
+  managed: boolean
+  /** Что добавится — для предпросмотра */
+  entries: string[]
 }
