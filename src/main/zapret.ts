@@ -183,6 +183,15 @@ function loadedIpset(pack: Pack): string[] {
   return existsSync(backup) ? listLines(read(backup)).filter((l) => l !== IPSET_PLACEHOLDER) : []
 }
 
+/** Почему Windows не дала запустить winws.exe — по-человечески */
+function spawnMessage(e: NodeJS.ErrnoException): string {
+  if (e.code === 'EPERM' || e.code === 'EACCES') {
+    return 'Windows не даёт запустить winws.exe: нет доступа к файлу. Перезапустите Prism от администратора — права на каталог zapret починятся'
+  }
+  if (e.code === 'ENOENT') return 'winws.exe пропал из каталога сборки — скорее всего, его убрал антивирус. Переустановите сборку'
+  return `winws.exe не запускается: ${errText(e)}`
+}
+
 /* ─────────────────────────── каталог ─────────────────────────── */
 
 let rootSecured = false
@@ -207,10 +216,18 @@ async function ensureRoot(): Promise<void> {
   mkdirSync(join(root, 'packs'), { recursive: true })
   noLinks()
   if (!IS_WIN || rootSecured) return
-  const icacls = (args: string[]) => exec('icacls', [base, ...args], { windowsHide: true, timeout: 60000 })
+  const icacls = (target: string, args: string[]) => exec('icacls', [target, ...args], { windowsHide: true, timeout: 60000 })
   try {
-    await icacls(['/setowner', '*S-1-5-32-544', '/T', '/C', '/Q'])
-    await icacls(['/inheritance:r', '/grant:r', '*S-1-5-32-544:(OI)(CI)F', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-545:(OI)(CI)RX', '/T', '/C', '/Q'])
+    // Владелец — для всего дерева: чужой владелец файла может переписать его права
+    await icacls(base, ['/setowner', '*S-1-5-32-544', '/T', '/C', '/Q'])
+    /* Права ставим только корню, без /T. В 1.6.0 здесь был /T, и это ломало
+       всё: на файлах icacls снимает унаследованные записи, а разрешения с
+       флагами наследования (OI)(CI) молча не выдаёт — и отвечает «успешно».
+       Файлы оставались с пустым списком доступа, winws.exe не запускался
+       даже от администратора (spawn EPERM). */
+    await icacls(base, ['/inheritance:r', '/grant:r', '*S-1-5-32-544:(OI)(CI)F', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-545:(OI)(CI)RX', '/C', '/Q'])
+    // Всё внутри — к правам, унаследованным от корня. Заодно чинит установки, сломанные 1.6.0
+    await icacls(join(base, '*'), ['/reset', '/T', '/C', '/Q'])
     rootSecured = true
   } catch (e) {
     throw new Error(`Не удалось закрыть каталог zapret от записи: ${errText(e)}`)
@@ -221,6 +238,7 @@ async function ensureRoot(): Promise<void> {
 
 const STATUS_SCRIPT = String.raw`
 $ErrorActionPreference = 'SilentlyContinue'
+$ProgressPreference = 'SilentlyContinue'
 $s = Get-CimInstance Win32_Service -Filter "Name='zapret'"
 $d = @(Get-CimInstance Win32_SystemDriver -Filter "Name='WinDivert' OR Name='WinDivert14'")
 $k = (Get-ItemProperty -LiteralPath 'HKLM:\System\CurrentControlSet\Services\zapret' -Name 'zapret-discord-youtube').'zapret-discord-youtube'
@@ -250,6 +268,7 @@ const q = (s: string): string => s.replace(/'/g, "''")
    значит упираться в предел длины команды и думать о кавычках. */
 const INSTALL_SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 $result = 'OK'
 try {
   if (Get-Service -Name zapret -ErrorAction SilentlyContinue) {
@@ -270,6 +289,7 @@ Write-Output $result
 
 const REMOVE_SCRIPT = String.raw`
 $ErrorActionPreference = 'SilentlyContinue'
+$ProgressPreference = 'SilentlyContinue'
 if (Get-Service -Name zapret) { Stop-Service -Name zapret -Force; & sc.exe delete zapret | Out-Null }
 Get-Process -Name winws | Stop-Process -Force
 foreach ($n in 'WinDivert', 'WinDivert14') { & sc.exe stop $n | Out-Null; & sc.exe delete $n | Out-Null }
@@ -352,6 +372,11 @@ export class Zapret extends EventEmitter {
   /* ─── жизненный цикл ─── */
 
   async init(): Promise<void> {
+    if (IS_WIN && existsSync(zapretPaths.root) && (await isElevated())) {
+      /* Сразу, до чтения сборки: у установок, сломанных 1.6.0, файлы без прав
+         на чтение, и без этого сборка выглядела бы неустановленной */
+      await ensureRoot().catch((e) => this.log(errText(e), 'warn'))
+    }
     this.loadPack()
     if (!IS_WIN) return this.emitState()
     await this.refresh()
@@ -467,11 +492,17 @@ export class Zapret extends EventEmitter {
 
   private spawnWinws(pack: Pack, args: string[], piped: boolean): ChildProcess {
     const bin = join(pack.dir, 'bin')
-    const p = spawn(join(bin, 'winws.exe'), args, {
-      cwd: bin,
-      windowsHide: true,
-      stdio: piped ? ['ignore', 'pipe', 'pipe'] : 'ignore'
-    })
+    let p: ChildProcess
+    try {
+      p = spawn(join(bin, 'winws.exe'), args, {
+        cwd: bin,
+        windowsHide: true,
+        stdio: piped ? ['ignore', 'pipe', 'pipe'] : 'ignore'
+      })
+    } catch (e) {
+      // EPERM и часть других ошибок Node бросает прямо из spawn, а не событием
+      throw new Error(spawnMessage(e as NodeJS.ErrnoException))
+    }
     // Без обработчика ошибка запуска (файл съел антивирус) уронила бы main-процесс
     p.on('error', (e) => this.log(`winws.exe не запускается: ${errText(e)}`, 'error'))
     return p
@@ -559,6 +590,8 @@ export class Zapret extends EventEmitter {
       const args = this.args(pack, id, cfg, zapretPaths.run)
 
       const p = this.spawnWinws(pack, args, true)
+      let spawnError: NodeJS.ErrnoException | undefined
+      p.once('error', (e) => (spawnError = e))
       this.proc = p
       const onData = (b: Buffer): void => {
         const lines = b.toString().split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
@@ -585,6 +618,7 @@ export class Zapret extends EventEmitter {
 
       if (!(await this.waitAlive(p, 1500))) {
         this.proc = null
+        if (spawnError) throw new Error(spawnMessage(spawnError))
         const out = this.state.output
         const last = out.filter((l) => /error|fail|cannot|could not/i.test(l)).at(-1) ?? out.at(-1)
         throw new Error(last ? `winws.exe не запустился: ${last}` : 'winws.exe завершился сразу после запуска')
