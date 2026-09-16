@@ -1,16 +1,19 @@
 import { BrowserWindow, app, clipboard, dialog, ipcMain, shell } from 'electron'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs'
 import { basename, join, dirname } from 'node:path'
-import type { AppRule, ConnectionItem, RoutingRule, Settings, Subscription } from '@shared/types'
+import type { AppRule, ConnectionItem, RoutingRule, Settings, Subscription, ZapretCheck, ZapretConfig, ZapretTestKind } from '@shared/types'
 import { buildConfig } from '@shared/config-builder'
 import { DEFAULT_ENABLED_PRESETS, DEFAULT_SETTINGS } from '@shared/defaults'
 import { uid } from '@shared/parsers'
+import { GAME_FILTERS, IPSET_MODES, cleanList } from '@shared/zapret'
 import { store, paths } from './store'
 import { core } from './core'
 import { updater } from './updater'
 import { fetchSubscription, importManual, mergeSubscriptionNodes } from './subs'
+import { zapret, zapretPaths } from './zapret'
+import { applyFix, clearDiscordCache, hostsApply, hostsInfo, hostsRemove, resetNetwork, runDiagnostics } from './zapret-tools'
 import {
   clearSystemProxy,
   getAppIcon,
@@ -43,7 +46,8 @@ export function snapshot() {
     customRules: d.customRules,
     enabledPresets: d.enabledPresets,
     activeNodeId: d.activeNodeId,
-    totals: d.totals
+    totals: d.totals,
+    zapret: d.zapret
   }
 }
 
@@ -86,6 +90,14 @@ export function wireCoreEvents(): void {
 
   core.clash.on('log', (l: { level: string; message: string }) => {
     send('evt:log', { id: ++logSeq, level: l.level, message: l.message, t: Date.now(), source: 'core' })
+  })
+
+  zapret.on('state', (z) => send('evt:zapret', z))
+  zapret.on('test', (t) => send('evt:zapretTest', t))
+  zapret.on('snapshot', () => pushSnapshot())
+  zapret.on('toast', (t: { kind: 'ok' | 'warn' | 'error'; text: string }) => toast(t.kind, t.text))
+  zapret.on('log', (l: { level: string; message: string }) => {
+    send('evt:log', { id: ++logSeq, level: l.level, message: l.message, t: Date.now(), source: 'zapret' })
   })
 
   updater.on('state', (u) => send('evt:update', u))
@@ -135,6 +147,42 @@ function cleanSettings(patch: Partial<Settings>, cur: Settings): Partial<Setting
   }
   return out
 }
+
+/** Правим только пришедшие ключи zapret; стратегии и фейки — только из установленной сборки */
+function cleanZapret(patch: Partial<ZapretConfig>, cur: ZapretConfig): ZapretConfig {
+  if (!patch || typeof patch !== 'object') return cur
+  const pack = zapret.getState().pack
+  const out: ZapretConfig = { ...cur, lists: { ...cur.lists } }
+  if (isStr(patch.strategy) && (!pack || pack.strategies.some((x) => x.id === patch.strategy))) out.strategy = patch.strategy
+  if ('gameFilter' in patch) out.gameFilter = oneOf(patch.gameFilter, GAME_FILTERS, cur.gameFilter)
+  if ('ipsetMode' in patch) out.ipsetMode = oneOf(patch.ipsetMode, IPSET_MODES, cur.ipsetMode)
+  for (const k of ['fakeDiscord', 'fakeGame'] as const) {
+    const v = patch[k]
+    if (isStr(v) && (v === '' || pack?.fakes.includes(v))) out[k] = v
+  }
+  if (typeof patch.autoStart === 'boolean') out.autoStart = patch.autoStart
+  if (typeof patch.checkUpdates === 'boolean') out.checkUpdates = patch.checkUpdates
+  const l = patch.lists
+  if (l && typeof l === 'object') {
+    if ('general' in l) out.lists.general = cleanList(l.general, 'domain')
+    if ('exclude' in l) out.lists.exclude = cleanList(l.exclude, 'domain')
+    if ('ipset' in l) out.lists.ipset = cleanList(l.ipset, 'ip')
+    if ('ipsetExclude' in l) out.lists.ipsetExclude = cleanList(l.ipsetExclude, 'ip')
+  }
+  return out
+}
+
+/** Ошибку отдаём полем, а не исключением: иначе в renderer приезжает «Error invoking remote method…» */
+async function safe<T extends object>(fn: () => Promise<T> | T): Promise<({ ok: true } & T) | { ok: false; error: string }> {
+  try {
+    return { ok: true, ...(await fn()) }
+  } catch (e: any) {
+    return { ok: false, error: String(e?.message ?? e) }
+  }
+}
+
+const FIXES: NonNullable<ZapretCheck['fix']>[] = ['tcp-timestamps', 'remove-windivert', 'remove-conflicts']
+const LIST_NAMES = ['general', 'google', 'exclude', 'ipsetExclude', 'ipset'] as const
 
 /* ─────────────────────── регистрация обработчиков ─────────────────────── */
 
@@ -503,6 +551,89 @@ export function registerIpc(): void {
     })
     writeFileSync(r.filePath, JSON.stringify(cfg, null, 2), 'utf8')
     return r.filePath
+  })
+
+  /* — zapret — */
+  h('zapret:state', () => zapret.getState())
+  h('zapret:refresh', () => zapret.refresh())
+  h('zapret:start', (strategy?: string) => zapret.start(isStr(strategy) ? strategy : undefined))
+  h('zapret:stop', () => zapret.stop())
+  h('zapret:config', (patch: Partial<ZapretConfig>) => {
+    const before = store.get().zapret
+    const after = cleanZapret(patch, before)
+    store.patch({ zapret: after })
+    pushSnapshot()
+    const keys: (keyof ZapretConfig)[] = ['strategy', 'gameFilter', 'ipsetMode', 'fakeDiscord', 'fakeGame', 'lists']
+    if (keys.some((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))) zapret.scheduleApply()
+    return snapshot()
+  })
+  h('zapret:installService', (strategy?: string) => safe(() => zapret.installService(isStr(strategy) ? strategy : undefined).then(() => ({}))))
+  h('zapret:removeService', () => safe(() => zapret.removeService().then(() => ({}))))
+  h('zapret:killForeign', () => safe(() => zapret.killForeign().then(() => ({}))))
+  h('zapret:checkUpdate', () => zapret.checkUpdate())
+  h('zapret:installLatest', () => safe(() => zapret.installLatest().then(() => ({}))))
+  h('zapret:installFromFile', async () => {
+    if (!win) return { ok: false, error: 'Окно не готово' }
+    const r = await dialog.showOpenDialog(win, {
+      title: 'Архив zapret-discord-youtube',
+      properties: ['openFile'],
+      filters: [{ name: 'Zip-архив', extensions: ['zip'] }]
+    })
+    if (r.canceled || !r.filePaths[0]) return { ok: false, error: '' }
+    const file = r.filePaths[0]
+    return safe(async () => ({ version: await zapret.installFromFile(file) }))
+  })
+  h('zapret:updateIpset', () => safe(async () => ({ count: await zapret.updateIpset() })))
+  h('zapret:readList', (name: (typeof LIST_NAMES)[number]) =>
+    zapret.readList(LIST_NAMES.includes(name) ? name : 'general')
+  )
+  h('zapret:diagnostics', () =>
+    safe(async () => ({
+      checks: IS_WIN
+        ? await runDiagnostics({
+            root: zapretPaths.root,
+            packDir: zapret.getState().pack ? join(zapretPaths.packs, store.get().zapretPack ?? '') : undefined,
+            localPort: store.get().settings.localPort
+          })
+        : []
+    }))
+  )
+  h('zapret:fix', (fix: NonNullable<ZapretCheck['fix']>) =>
+    safe(async () => {
+      if (!FIXES.includes(fix)) throw new Error('Неизвестное исправление')
+      const message = await applyFix(fix)
+      await zapret.refresh()
+      return { message }
+    })
+  )
+  h('zapret:clearDiscord', () => safe(() => clearDiscordCache()))
+  h('zapret:resetNetwork', () => safe(() => resetNetwork().then(() => ({}))))
+  h('zapret:hosts', () => safe(async () => ({ info: await hostsInfo() })))
+  h('zapret:hostsApply', () => safe(async () => ({ info: await hostsApply() })))
+  h('zapret:hostsRemove', () => safe(async () => ({ info: await hostsRemove() })))
+  h('zapret:testStart', (kind: ZapretTestKind, ids: string[]) =>
+    safe(async () => {
+      const c = core.getState()
+      await zapret.startTests(
+        kind === 'dpi' ? 'dpi' : 'standard',
+        Array.isArray(ids) ? ids.filter(isStr) : [],
+        c.status === 'running' && c.captureMode === 'tun'
+      )
+      return {}
+    })
+  )
+  h('zapret:testCancel', () => zapret.cancelTests())
+  h('zapret:testState', () => zapret.getTest())
+  h('zapret:report', () => {
+    const f = zapret.getTest()?.file
+    return f && existsSync(f) ? readFileSync(f, 'utf8') : ''
+  })
+  h('zapret:openReports', () => {
+    mkdirSync(zapretPaths.reports, { recursive: true })
+    shell.openPath(zapretPaths.reports)
+  })
+  h('zapret:openRoot', () => {
+    if (existsSync(zapretPaths.root)) shell.openPath(zapretPaths.root)
   })
 
   /* — система — */

@@ -1760,6 +1760,149 @@ textarea.input {
   bottom: 0;
 }
 
+/* ─────────────── zapret ─────────────── */
+
+/* Работающий обход — точка в боковом меню вместо счётчика */
+.nav-item .badge.live {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ok) 22%, transparent);
+}
+
+.zap-lead {
+  font-size: 12.5px;
+  line-height: 1.5;
+  max-width: 680px;
+  margin: -3px 0 12px;
+}
+
+/* Стратегий два десятка — плитки компактнее, чем у пресетов маршрутов */
+.zap-grid {
+  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+  gap: 9px;
+}
+.zap-grid .preset {
+  padding: 12px 13px;
+  gap: 6px;
+}
+.zap-grid .preset .ico {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+}
+.zap-grid .preset .top b {
+  line-height: 1.25;
+}
+/* Приёмы стратегии и счёт последнего теста — одной строкой под названием */
+.zap-meta {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: auto;
+}
+.zap-meta p {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+.zap-meta .chip {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  font-size: 10.5px;
+}
+
+/* Четыре инструмента — два на два, а не три и один в хвосте */
+.zap-tools {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.setting .ctl .select.zap-fake {
+  width: 250px;
+}
+
+/* Строка-пояснение внутри карточки: основа от .upd-notes, чтобы темы красили её так же */
+.upd-notes.zap-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  white-space: normal;
+  max-height: none;
+  overflow: visible;
+  font-size: 12.5px;
+  line-height: 1.45;
+  user-select: none;
+}
+.modal .upd-notes.zap-note {
+  margin-top: 0;
+}
+.zap-note > svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.zap-note.warn {
+  border-color: color-mix(in oklab, var(--warn) 34%, transparent);
+  background: color-mix(in oklab, var(--warn) 9%, var(--panel));
+}
+.zap-note.warn > svg {
+  color: var(--warn);
+}
+
+.upd-notes.zap-output {
+  margin-top: 14px;
+  font-size: 11px;
+  line-height: 1.6;
+  max-height: 150px;
+}
+
+/* Пункт диагностики: иконка по первой строке, текст может переноситься */
+.rule.zap-check {
+  align-items: flex-start;
+  padding: 10px 12px;
+}
+.zap-check .ic {
+  display: grid;
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+.zap-check b {
+  font-size: 13px;
+  font-weight: 550;
+}
+.zap-check .col > span {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+  line-height: 1.45;
+}
+.zap-check .btn {
+  margin-top: -3px;
+}
+
+.zap-progress {
+  height: 5px;
+  background: var(--panel-3);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.zap-progress i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+  transition: width 0.3s ease;
+}
+
+.table tr.zap-row {
+  cursor: pointer;
+}
+.table tr.zap-row.best td {
+  background: color-mix(in oklab, var(--ok) 8%, transparent);
+}
+
 /* ═══ Liquid Glass — толстое матовое стекло с бликом по кромке ═══ */
 [data-theme='glass'] {
   --bg: #0a0f1c;
@@ -2619,6 +2762,7 @@ textarea.input {
 [data-theme='cats'] .nav-item:nth-of-type(5)::before { background-image: url('./assets/cats/c05.jpg'); }
 [data-theme='cats'] .nav-item:nth-of-type(6)::before { background-image: url('./assets/cats/c06.jpg'); }
 [data-theme='cats'] .nav-item:nth-of-type(7)::before { background-image: url('./assets/cats/c07.jpg'); }
+[data-theme='cats'] .nav-item:nth-of-type(8)::before { background-image: url('./assets/cats/c19.jpg'); }
 [data-theme='cats'] .nav-item.active::before {
   box-shadow: 0 0 0 2px #fff, 0 0 0 4px color-mix(in oklab, var(--accent-1) 70%, transparent);
 }

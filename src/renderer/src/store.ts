@@ -6,11 +6,17 @@ import type {
   LogEntry,
   RoutingRule,
   Settings,
-  TrafficSample, UpdateState } from '@shared/types'
+  TrafficSample,
+  UpdateState,
+  ZapretConfig,
+  ZapretState,
+  ZapretTestProgress
+} from '@shared/types'
 import type { BootstrapInfo, Snapshot } from '../../preload'
 import { DEFAULT_SETTINGS } from '@shared/defaults'
+import { DEFAULT_ZAPRET } from '@shared/zapret'
 
-export type Page = 'dashboard' | 'servers' | 'routing' | 'apps' | 'connections' | 'logs' | 'settings'
+export type Page = 'dashboard' | 'servers' | 'routing' | 'apps' | 'zapret' | 'connections' | 'logs' | 'settings'
 
 export interface Toast {
   id: number
@@ -37,6 +43,8 @@ interface State {
   maximized: boolean
   logPaused: boolean
   update: UpdateState
+  zapret: ZapretState
+  zapretTest: ZapretTestProgress | null
 
   init: () => Promise<void>
   setPage: (p: Page) => void
@@ -52,6 +60,7 @@ interface State {
   setAppRules: (r: AppRule[]) => Promise<void>
   setCustomRules: (r: RoutingRule[]) => Promise<void>
   setPresets: (ids: string[]) => Promise<void>
+  patchZapret: (p: Partial<ZapretConfig>) => Promise<void>
   clearLogs: () => void
   setLogPaused: (v: boolean) => void
 }
@@ -63,7 +72,8 @@ const emptySnap: Snapshot = {
   appRules: [],
   customRules: [],
   enabledPresets: [],
-  totals: { up: 0, down: 0 }
+  totals: { up: 0, down: 0 },
+  zapret: DEFAULT_ZAPRET
 }
 
 let toastSeq = 0
@@ -84,6 +94,8 @@ export const useStore = create<State>((set, get) => ({
   maximized: false,
   logPaused: false,
   update: { status: 'idle' },
+  zapret: { supported: false, elevated: false, root: '', status: 'stopped', output: [], service: { installed: false }, foreignWinws: 0, update: {} },
+  zapretTest: null,
 
   async init() {
     const api = window.prism
@@ -129,6 +141,10 @@ export const useStore = create<State>((set, get) => ({
     api.events.onToast((t) => get().toast(t.kind, t.text))
     api.events.onUpdate((u) => set({ update: u }))
     void api.update.state().then((u) => set({ update: u }))
+    api.events.onZapret((z) => set({ zapret: z }))
+    api.events.onZapretTest((t) => set({ zapretTest: t }))
+    void api.zapret.state().then((z) => set({ zapret: z }))
+    void api.zapret.testState().then((t) => set({ zapretTest: t }))
   },
 
   setPage: (page) => set({ page }),
@@ -203,6 +219,13 @@ export const useStore = create<State>((set, get) => ({
   async setPresets(ids) {
     set({ snap: { ...get().snap, enabledPresets: ids } })
     const snap = await window.prism.rules.setPresets(ids)
+    set({ snap })
+  },
+
+  async patchZapret(p) {
+    const cur = get().snap
+    set({ snap: { ...cur, zapret: { ...cur.zapret, ...p } } })
+    const snap = await window.prism.zapret.config(p)
     set({ snap })
   },
 

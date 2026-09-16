@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   ArrowUpCircle,
   Info,
+  LockOpen,
   Sparkles
 } from 'lucide-react'
 import { CHANGELOG } from '@shared/changelog'
@@ -25,6 +26,7 @@ import Dashboard from './pages/Dashboard'
 import Servers from './pages/Servers'
 import Routing from './pages/Routing'
 import Apps from './pages/Apps'
+import ZapretPage from './pages/Zapret'
 import Connections from './pages/Connections'
 import Logs from './pages/Logs'
 import SettingsPage from './pages/Settings'
@@ -35,6 +37,7 @@ const NAV: { id: Page; label: string; icon: typeof Activity }[] = [
   { id: 'servers', label: 'Серверы', icon: Globe },
   { id: 'routing', label: 'Маршруты', icon: Waypoints },
   { id: 'apps', label: 'Приложения', icon: AppWindow },
+  { id: 'zapret', label: 'Zapret', icon: LockOpen },
   { id: 'connections', label: 'Соединения', icon: Network },
   { id: 'logs', label: 'Журнал', icon: ScrollText },
   { id: 'settings', label: 'Настройки', icon: SettingsIcon }
@@ -45,13 +48,14 @@ const PAGES: Record<Page, () => JSX.Element> = {
   servers: Servers,
   routing: Routing,
   apps: Apps,
+  zapret: ZapretPage,
   connections: Connections,
   logs: Logs,
   settings: SettingsPage
 }
 
 export default function App(): JSX.Element {
-  const { ready, page, setPage, init, core, snap, toasts, dropToast, maximized, connections } = useStore()
+  const { ready, page, setPage, init, core, snap, toasts, dropToast, maximized, connections, zapret } = useStore()
 
   useEffect(() => {
     void init()
@@ -144,6 +148,8 @@ export default function App(): JSX.Element {
                   : n.id === 'apps' && snap.appRules.length
                     ? String(snap.appRules.length)
                     : null
+            // Работающий обход — точка вместо счётчика: число тут ничего не значит
+            const live = n.id === 'zapret' && (zapret.status === 'running' || /running/i.test(zapret.service.state ?? ''))
             return (
               <button
                 key={n.id}
@@ -155,6 +161,7 @@ export default function App(): JSX.Element {
                 <Icon size={17} strokeWidth={active ? 2.2 : 1.9} />
                 <span className="lbl">{n.label}</span>
                 {badge && <span className="badge">{badge}</span>}
+                {live && <span className="badge live" title="Обход работает" />}
               </button>
             )
           })}

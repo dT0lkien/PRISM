@@ -26,6 +26,8 @@ jobs:
         run: node scripts/run-validate.mjs
       - name: Живучесть хранилища
         run: node scripts/run-store-test.mjs
+      - name: Zapret — стратегии, списки, hosts и настоящий релиз сборки
+        run: node scripts/run-zapret-test.mjs
       - name: Сквозной прогон трафика через ядро
         run: |
           set +e

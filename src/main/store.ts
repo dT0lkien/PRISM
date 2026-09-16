@@ -2,8 +2,9 @@ import { app } from 'electron'
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { randomBytes } from 'node:crypto'
-import type { AppRule, RoutingRule, ServerNode, Settings, Subscription } from '@shared/types'
+import type { AppRule, RoutingRule, ServerNode, Settings, Subscription, ZapretConfig, ZapretTestSummary } from '@shared/types'
 import { DEFAULT_ENABLED_PRESETS, DEFAULT_SETTINGS } from '@shared/defaults'
+import { DEFAULT_ZAPRET } from '@shared/zapret'
 
 export interface StoreData {
   settings: Settings
@@ -19,6 +20,11 @@ export interface StoreData {
   seenVersion?: string
   /** Сохранённые настройки системного прокси до нашего вмешательства */
   savedProxy?: { enable: string; server: string; override: string }
+  /** Обход DPI без VPN */
+  zapret: ZapretConfig
+  /** Какая из установленных сборок zapret активна */
+  zapretPack?: string
+  zapretLastTest?: ZapretTestSummary
 }
 
 /* В store.json открытым текстом лежат пароли, UUID и ключи всех серверов
@@ -77,7 +83,8 @@ function defaults(): StoreData {
     customRules: [],
     enabledPresets: [...DEFAULT_ENABLED_PRESETS],
     clashSecret: randomBytes(16).toString('hex'),
-    totals: { up: 0, down: 0 }
+    totals: { up: 0, down: 0 },
+    zapret: structuredClone(DEFAULT_ZAPRET)
   }
 }
 
@@ -95,7 +102,12 @@ function reconcile(saved: Partial<StoreData>): StoreData {
       dns: { ...d.settings.dns, ...(s as Settings).dns }
     },
     clashSecret: saved.clashSecret || d.clashSecret,
-    totals: saved.totals ?? d.totals
+    totals: saved.totals ?? d.totals,
+    zapret: {
+      ...d.zapret,
+      ...saved.zapret,
+      lists: { ...d.zapret.lists, ...saved.zapret?.lists }
+    }
   }
 }
 

@@ -70,7 +70,19 @@ const settings = {
   extraConfig: ''
 }
 
+const zapretConfig = {
+  strategy: 'general (ALT5)',
+  gameFilter: 'off',
+  ipsetMode: 'loaded',
+  fakeDiscord: '',
+  fakeGame: '',
+  autoStart: true,
+  checkUpdates: true,
+  lists: { general: ['example-blocked.com', 'static.example-blocked.net'], exclude: [], ipset: [], ipsetExclude: [] }
+}
+
 const snapshot = {
+  zapret: zapretConfig,
   settings,
   nodes,
   subscriptions: [
@@ -168,6 +180,80 @@ const LOGS = [
   ['info', 'router: match[8] rule_set=geosite-youtube => proxy']
 ]
 
+const STRATEGIES = [
+  ['general', 'multisplit'],
+  ['general (ALT)', 'fake + fakedsplit · ts'],
+  ['general (ALT2)', 'multisplit'],
+  ['general (ALT3)', 'fake + hostfakesplit · ts'],
+  ['general (ALT4)', 'fake + multisplit · badseq'],
+  ['general (ALT5)', 'syndata + multidisorder'],
+  ['general (ALT6)', 'multisplit'],
+  ['general (ALT7)', 'multisplit + syndata'],
+  ['general (ALT8)', 'fake · badseq'],
+  ['general (ALT9)', 'hostfakesplit · ts, md5sig'],
+  ['general (ALT10)', 'fake · ts'],
+  ['general (ALT11)', 'fake + multisplit · ts'],
+  ['general (ALT12)', 'fake + multisplit + hostfakesplit · ts'],
+  ['general (ALT13)', 'fake + multisplit + hostfakesplit · ts'],
+  ['general (EXP)', 'fake + multisplit + hostfakesplit · ts'],
+  ['general (FAKE TLS AUTO)', 'fake + multidisorder · badseq'],
+  ['general (FAKE TLS AUTO ALT)', 'fake + fakedsplit · badseq'],
+  ['general (FAKE TLS AUTO ALT2)', 'fake + multisplit · badseq'],
+  ['general (FAKE TLS AUTO ALT3)', 'fake + multisplit · ts'],
+  ['general (SIMPLE FAKE)', 'fake + hostfakesplit · ts'],
+  ['general (SIMPLE FAKE ALT)', 'fake · badseq'],
+  ['general (SIMPLE FAKE ALT2)', 'fake · ts']
+].map(([id, summary]) => ({ id, label: id.match(/\((.+)\)/)?.[1] ?? id, summary }))
+
+const scores = Object.fromEntries(STRATEGIES.map((s, i) => [s.id, { ok: [30, 21, 29, 12, 24, 36, 27, 33, 9, 18][i % 10], total: 36 }]))
+
+const zapretState = {
+  supported: process.env.PRISM_ZAPRET !== 'mac',
+  elevated: true,
+  root: 'C:\\ProgramData\\Prism\\zapret',
+  pack: process.env.PRISM_ZAPRET === 'empty' ? undefined : {
+    version: '1.10.2',
+    strategies: STRATEGIES,
+    fakes: ['quic_initial_www_google_com', 'stun', 'stun2', 'tls_clienthello_www_google_com'],
+    defaultFakeDiscord: 'stun',
+    defaultFakeGame: 'quic_initial_4pda_to',
+    lists: { general: 59, google: 20, exclude: 128, ipsetExclude: 11, ipset: 32126 },
+    ipsetUpdatedAt: Date.now() - 86400_000 * 3
+  },
+  status: 'running',
+  running: 'general (ALT5)',
+  since: Date.now() - 2_710_000,
+  output: [],
+  service: { installed: false },
+  windivert: 'Running',
+  foreignWinws: 0,
+  update: { latest: '1.10.2', checkedAt: Date.now() - 1_200_000 },
+  lastTest: { kind: 'standard', at: Date.now() - 3600_000, best: 'general (ALT5)', scores }
+}
+
+const zapretTest = {
+  running: false,
+  kind: 'standard',
+  total: 6,
+  done: 6,
+  best: 'general (ALT5)',
+  results: STRATEGIES.slice(0, 6).map((s, i) => ({
+    strategy: s.id,
+    started: i !== 3,
+    ok: i === 3 ? 0 : scores[s.id].ok,
+    error: i === 3 ? 0 : 36 - scores[s.id].ok,
+    unsup: 0,
+    blocked: 0,
+    pingOk: i === 3 ? 0 : 4,
+    pingFail: 0,
+    targets: []
+  })),
+  file: 'C:\\test_results.txt',
+  finishedAt: Date.now()
+}
+
+const r = (v = {}) => async () => ({ ok: true, ...v })
+
 window.prism = {
   bootstrap: async () => ({
     snapshot,
@@ -243,6 +329,42 @@ window.prism = {
     markSeen: async () => {}
   },
 
+  zapret: {
+    state: async () => zapretState,
+    refresh: async () => zapretState,
+    start: r(),
+    stop: async () => {},
+    config: async () => snapshot,
+    installService: r(),
+    removeService: r(),
+    killForeign: r(),
+    checkUpdate: async () => zapretState,
+    installLatest: r(),
+    installFromFile: r({ version: '1.10.2' }),
+    updateIpset: r({ count: 32126 }),
+    readList: async () => ({ lines: ['discord.com', 'discord.gg', 'discordapp.net'], total: 3 }),
+    diagnostics: r({
+      checks: [
+        { id: 'tcp', level: 'error', title: 'Отметки времени TCP выключены', detail: 'Стратегии с подделкой по отметкам времени (ts) без них не работают.', fix: 'tcp-timestamps' },
+        { id: 'vpn', level: 'warn', title: 'Найдены службы VPN: RadminVPN', detail: 'Некоторые VPN конфликтуют с zapret — на время проверки выключите их.' },
+        { id: 'dns', level: 'warn', title: 'Безопасный DNS не настроен в Windows', detail: 'Включите DNS-over-HTTPS в браузере или в параметрах Windows 11.', link: 'https://github.com' },
+        { id: 'bfe', level: 'ok', title: 'Служба Base Filtering Engine работает' }
+      ]
+    }),
+    fix: r({ message: 'Готово' }),
+    clearDiscord: r({ found: ['Discord'], failed: [] }),
+    resetNetwork: r(),
+    hosts: r({ info: { upToDate: false, total: 79, missing: 12, stale: 3, managed: true, entries: ['149.154.167.220 web.telegram.org', '162.159.138.232 discord.com'] } }),
+    hostsApply: r({ info: { upToDate: true, total: 79, missing: 0, stale: 0, managed: true, entries: [] } }),
+    hostsRemove: r({ info: { upToDate: false, total: 79, missing: 79, stale: 0, managed: false, entries: [] } }),
+    testStart: r(),
+    testCancel: async () => {},
+    testState: async () => zapretTest,
+    report: async () => '',
+    openReports: async () => {},
+    openRoot: async () => {}
+  },
+
   window: {
     minimize: async () => {},
     maximize: async () => {},
@@ -258,7 +380,9 @@ window.prism = {
     onLatency: on('latency'),
     onToast: on('toast'),
     onMaximize: on('maximize'),
-    onUpdate: on('update')
+    onUpdate: on('update'),
+    onZapret: on('zapret'),
+    onZapretTest: on('zapretTest')
   }
 }
 

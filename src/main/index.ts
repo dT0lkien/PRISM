@@ -5,7 +5,8 @@ import { store, paths } from './store'
 import { core } from './core'
 import { updater } from './updater'
 import { registerIpc, setMainWindow, snapshot, wireCoreEvents } from './ipc'
-import { clearStaleProxy, clearSystemProxy, emergencyCleanupSync, isElevated, killStrayCores, IS_WIN } from './win'
+import { clearStaleProxy, clearSystemProxy, emergencyCleanupSync, isElevated, killPidSync, killStrayCores, IS_WIN } from './win'
+import { zapret } from './zapret'
 import { fetchSubscription, mergeSubscriptionNodes } from './subs'
 
 const isDev = !app.isPackaged
@@ -81,6 +82,8 @@ function createWindow(): void {
     cleanedUp = true
     try {
       emergencyCleanupSync(core.pid, store.get().savedProxy)
+      // winws.exe из режима «вместе с Prism» — службу выключение Windows погасит само
+      killPidSync(zapret.pid)
     } catch {
       /* всё равно выключаемся */
     }
@@ -112,7 +115,7 @@ function createWindow(): void {
 
   /* Новые окна перехватываются выше, а навигация самого окна — нет. Уведи
      renderer на внешний адрес — и окно приложения станет браузером на чужой
-     странице, у которой уже есть мост window.prism со всеми 44 каналами.
+     странице, у которой уже есть мост window.prism со всеми его каналами.
      Поэтому чужую навигацию отменяем и отдаём системному браузеру, как выше. */
   win.webContents.on('will-navigate', (e, url) => {
     if (isAppUrl(url)) return
@@ -145,6 +148,8 @@ function buildTrayMenu(): void {
   const d = store.get()
   const active = d.nodes.find((n) => n.id === d.activeNodeId)
   const running = st.status === 'running'
+  const z = zapret.getState()
+  const zapretOn = z.status === 'running'
 
   tray.setToolTip(running ? `Prism — подключено${active ? `: ${active.name}` : ''}` : 'Prism — отключено')
   tray.setImage(trayImage(running))
@@ -185,6 +190,17 @@ function buildTrayMenu(): void {
           }
         ]
       },
+      {
+        label: zapretOn ? 'Выключить zapret' : 'Включить zapret',
+        visible: z.supported && !!z.pack && !z.service.installed,
+        click: async () => {
+          if (zapretOn) await zapret.stop()
+          else {
+            const r = await zapret.start()
+            if (!r.ok) win?.webContents.send('evt:toast', { kind: 'error', text: r.error ?? 'Zapret не запустился' })
+          }
+        }
+      },
       { type: 'separator' },
       {
         label: 'Открыть Prism',
@@ -219,6 +235,14 @@ function createTray(): void {
   })
   buildTrayMenu()
   core.on('state', buildTrayMenu)
+  // Меню перестраиваем только при смене статуса: вывод winws.exe тоже шлёт 'state'
+  let zapretStatus = ''
+  zapret.on('state', (z: { status: string; pack?: unknown; service: { installed: boolean } }) => {
+    const key = `${z.status}:${!!z.pack}:${z.service.installed}`
+    if (key === zapretStatus) return
+    zapretStatus = key
+    buildTrayMenu()
+  })
 }
 
 /* ─────────────────────── автообновление подписок ─────────────────────── */
@@ -295,6 +319,7 @@ app.whenReady().then(async () => {
   }
   createTray()
   scheduleSubscriptionUpdates()
+  void zapret.init()
 
   // Перед установкой обновления гасим туннель и возвращаем системный прокси
   updater.onBeforeInstall = cleanup
@@ -331,6 +356,12 @@ async function cleanup(): Promise<void> {
   cleanedUp = true
   try {
     await core.stop(true)
+  } catch {
+    /* всё равно выходим */
+  }
+  try {
+    // Служба живёт своей жизнью, а запущенный из Prism обход уходит вместе с ним
+    await zapret.stop(true)
   } catch {
     /* всё равно выходим */
   }

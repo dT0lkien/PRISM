@@ -8,7 +8,7 @@ const ROOT = process.cwd()
 const OUT = process.env.SHOT_DIR || join(ROOT, 'shots')
 mkdirSync(OUT, { recursive: true })
 
-const PAGES = ['dashboard', 'servers', 'routing', 'apps', 'connections', 'logs', 'settings']
+const PAGES = ['dashboard', 'servers', 'routing', 'apps', 'zapret', 'connections', 'logs', 'settings']
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
 app.disableHardwareAcceleration()
@@ -56,7 +56,7 @@ app.whenReady().then(async () => {
   await wait(700)
   await win.webContents.executeJavaScript(settle)
   await wait(250)
-  writeFileSync(join(OUT, '8-dashboard-light.png'), (await win.webContents.capturePage()).toPNG())
+  writeFileSync(join(OUT, '9-dashboard-light.png'), (await win.webContents.capturePage()).toPNG())
   console.log('✓ светлая тема')
 
   app.exit(0)
