@@ -27,7 +27,7 @@ import {
   Stethoscope
 } from 'lucide-react'
 import type { ZapretGameFilter, ZapretIpsetMode, ZapretLists, ZapretState } from '@shared/types'
-import { EXTRA_DOMAIN_GROUPS, EXTRA_DOMAINS, ZAPRET_REPO_URL, compareVersions, strategyLabel } from '@shared/zapret'
+import { EXTRA_DOMAINS, EXTRA_DOMAINS_NOTE, EXTRA_DOMAIN_GROUPS, ZAPRET_REPO_URL, compareVersions, strategyLabel } from '@shared/zapret'
 import { duration, plural, useStore } from '../store'
 import { Empty, Segmented, Setting, Switch } from '../ui'
 import { DiagnosticsModal, DiscordModal, HostsModal, ListModal, TestModal, type ListName } from './ZapretModals'
@@ -356,7 +356,7 @@ function Installed(): JSX.Element {
 
         <Setting
           title="Домены Prism"
-          hint={`${EXTRA_DOMAIN_GROUPS.map((g) => `${g.group}: ${g.note.toLowerCase()}`).join('. ')}. Этих доменов нет в списках сборки.`}
+          hint={`Чего нет в списках сборки: ${EXTRA_DOMAIN_GROUPS.map((g) => `${g.group} — ${g.note}`).join(', ')}. ${EXTRA_DOMAINS_NOTE}`}
         >
           <div className="row" style={{ gap: 7 }}>
             <button className="btn sm ghost" onClick={() => setList('extra')}>
