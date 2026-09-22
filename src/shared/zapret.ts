@@ -31,10 +31,32 @@ export const DEFAULT_ZAPRET: ZapretConfig = {
   ipsetMode: 'none',
   fakeDiscord: '',
   fakeGame: '',
+  extraDomains: true,
   autoStart: false,
   checkUpdates: true,
   lists: { general: [], exclude: [], ipset: [], ipsetExclude: [] }
 }
+
+/**
+ * Домены, которых нет в списках сборки, а без них у людей не работает.
+ * Проверено на живой Windows: без них обложки Spotify не грузятся вовсе
+ * (0 из 8 запросов), а веб-версия Telegram открывается через раз.
+ * Запись покрывает и поддомены: telegram.org — это и web.telegram.org.
+ */
+export const EXTRA_DOMAIN_GROUPS: { group: string; note: string; domains: string[] }[] = [
+  {
+    group: 'Telegram',
+    note: 'Веб-версия и превью ссылок. Telegram Desktop так не чинится: его дата-центры закрыты по IP, тут поможет только VPN',
+    domains: ['telegram.org', 't.me', 'telegram.me', 'telesco.pe', 'tg.dev']
+  },
+  {
+    group: 'Spotify',
+    note: 'Обложки альбомов и картинки интерфейса — они ходят через scdn.co',
+    domains: ['scdn.co', 'spotifycdn.com', 'spotify.com']
+  }
+]
+
+export const EXTRA_DOMAINS = EXTRA_DOMAIN_GROUPS.flatMap((g) => g.domains)
 
 export const GAME_FILTERS: readonly ZapretGameFilter[] = ['off', 'all', 'tcp', 'udp']
 export const IPSET_MODES: readonly ZapretIpsetMode[] = ['none', 'loaded', 'any']

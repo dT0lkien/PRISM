@@ -23,14 +23,15 @@ import { strategyLabel } from '@shared/zapret'
 import { plural, useStore } from '../store'
 import { Modal, Segmented } from '../ui'
 
-export type ListName = 'general' | 'google' | 'exclude' | 'ipsetExclude' | 'ipset'
+export type ListName = 'general' | 'google' | 'exclude' | 'ipsetExclude' | 'ipset' | 'extra'
 
 const LIST_TITLES: Record<ListName, string> = {
   general: 'Discord, Cloudflare и DNS-over-HTTPS',
   google: 'YouTube и Google',
   exclude: 'Домены-исключения',
   ipsetExclude: 'Исключённые подсети',
-  ipset: 'IPSet'
+  ipset: 'IPSet',
+  extra: 'Домены Prism — Telegram и Spotify'
 }
 
 const note = { fontSize: 13, lineHeight: 1.6 } as const

@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { deflateRawSync } from 'node:zlib'
 import {
   DEFAULT_ZAPRET,
+  EXTRA_DOMAINS,
   IPSET_PLACEHOLDER,
   cleanList,
   compareStrategies,
@@ -239,10 +240,16 @@ async function main(): Promise<void> {
     materialize: (dir: string, pack: unknown, cfg: typeof DEFAULT_ZAPRET, mode?: string) => void
     args: (pack: unknown, id: string, cfg: typeof DEFAULT_ZAPRET, dir: string) => string[]
   }
-  const cfg = { ...DEFAULT_ZAPRET, ipsetMode: 'loaded' as const, lists: { ...DEFAULT_ZAPRET.lists, ipset: ['5.5.5.5'] } }
+  const cfg = { ...DEFAULT_ZAPRET, ipsetMode: 'loaded' as const, lists: { ...DEFAULT_ZAPRET.lists, ipset: ['5.5.5.5'], general: ['мой.example'] } }
   internal.materialize(run, internal.pack, cfg)
   const rd = (f: string): string => readFileSync(join(run, f), 'utf8')
+  const general = (): string[] => rd('list-general-user.txt').trim().split(/\r?\n/)
+  ok('домены Prism и свои — в одном списке', EXTRA_DOMAINS.every((d) => general().includes(d)) && general().includes('мой.example'), general().join(', '))
+  internal.materialize(run, internal.pack, { ...cfg, extraDomains: false })
+  ok('переключатель выключен — только свои домены', general().join(',') === 'мой.example', general().join(', '))
+  internal.materialize(run, internal.pack, { ...cfg, extraDomains: false, lists: { ...cfg.lists, general: [] } })
   ok('пустой свой список — не пустой файл', rd('list-general-user.txt').includes('domain.example.abc'))
+  internal.materialize(run, internal.pack, cfg)
   ok('ipset по списку со своими адресами', rd('ipset-all.txt') === '1.1.1.0/24\r\n8.8.8.0/24\r\n5.5.5.5\r\n', JSON.stringify(rd('ipset-all.txt')))
   internal.materialize(run, internal.pack, cfg, 'any')
   ok('ipset any — ноль байт', rd('ipset-all.txt') === '')

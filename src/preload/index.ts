@@ -139,7 +139,7 @@ const api = {
     installLatest: () => invoke<Result>('zapret:installLatest'),
     installFromFile: () => invoke<Result<{ version: string }>>('zapret:installFromFile'),
     updateIpset: () => invoke<Result<{ count: number }>>('zapret:updateIpset'),
-    readList: (name: 'general' | 'google' | 'exclude' | 'ipsetExclude' | 'ipset') =>
+    readList: (name: 'general' | 'google' | 'exclude' | 'ipsetExclude' | 'ipset' | 'extra') =>
       invoke<{ lines: string[]; total: number }>('zapret:readList', name),
     diagnostics: () => invoke<Result<{ checks: ZapretCheck[] }>>('zapret:diagnostics'),
     fix: (fix: NonNullable<ZapretCheck['fix']>) => invoke<Result<{ message: string }>>('zapret:fix', fix),
