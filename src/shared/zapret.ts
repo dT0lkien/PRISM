@@ -44,17 +44,13 @@ export const DEFAULT_ZAPRET: ZapretConfig = {
  * Запись покрывает и поддомены: telegram.org — это и web.telegram.org.
  */
 export const EXTRA_DOMAIN_GROUPS: { group: string; note: string; domains: string[] }[] = [
-  {
-    group: 'Telegram',
-    note: 'Веб-версия и превью ссылок. Telegram Desktop так не чинится: его дата-центры закрыты по IP, тут поможет только VPN',
-    domains: ['telegram.org', 't.me', 'telegram.me', 'telesco.pe', 'tg.dev']
-  },
-  {
-    group: 'Spotify',
-    note: 'Обложки альбомов и картинки интерфейса — они ходят через scdn.co',
-    domains: ['scdn.co', 'spotifycdn.com', 'spotify.com']
-  }
+  { group: 'Telegram', note: 'веб-версия и превью ссылок', domains: ['telegram.org', 't.me', 'telegram.me', 'telesco.pe', 'tg.dev'] },
+  { group: 'Spotify', note: 'обложки альбомов и картинки интерфейса', domains: ['scdn.co', 'spotifycdn.com', 'spotify.com'] }
 ]
+
+/** Про что обход бессилен — об этом честно сказать рядом с переключателем */
+export const EXTRA_DOMAINS_NOTE =
+  'Telegram Desktop так не чинится: его дата-центры закрыты по IP, а обход правит только содержимое пакетов — тут нужен VPN.'
 
 export const EXTRA_DOMAINS = EXTRA_DOMAIN_GROUPS.flatMap((g) => g.domains)
 
