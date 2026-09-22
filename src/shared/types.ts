@@ -294,6 +294,8 @@ export interface ZapretConfig {
   fakeDiscord: string
   /** Фейк для UDP игр */
   fakeGame: string
+  /** Добавлять к спискам сборки домены Prism — Telegram-веб и картинки Spotify */
+  extraDomains: boolean
   /** Поднимать обход при запуске Prism */
   autoStart: boolean
   /** Проверять, не вышла ли новая сборка стратегий */

@@ -160,6 +160,7 @@ function cleanZapret(patch: Partial<ZapretConfig>, cur: ZapretConfig): ZapretCon
     const v = patch[k]
     if (isStr(v) && (v === '' || pack?.fakes.includes(v))) out[k] = v
   }
+  if (typeof patch.extraDomains === 'boolean') out.extraDomains = patch.extraDomains
   if (typeof patch.autoStart === 'boolean') out.autoStart = patch.autoStart
   if (typeof patch.checkUpdates === 'boolean') out.checkUpdates = patch.checkUpdates
   const l = patch.lists
@@ -182,7 +183,7 @@ async function safe<T extends object>(fn: () => Promise<T> | T): Promise<({ ok: 
 }
 
 const FIXES: NonNullable<ZapretCheck['fix']>[] = ['tcp-timestamps', 'remove-windivert', 'remove-conflicts']
-const LIST_NAMES = ['general', 'google', 'exclude', 'ipsetExclude', 'ipset'] as const
+const LIST_NAMES = ['general', 'google', 'exclude', 'ipsetExclude', 'ipset', 'extra'] as const
 
 /* ─────────────────────── регистрация обработчиков ─────────────────────── */
 
@@ -563,7 +564,7 @@ export function registerIpc(): void {
     const after = cleanZapret(patch, before)
     store.patch({ zapret: after })
     pushSnapshot()
-    const keys: (keyof ZapretConfig)[] = ['strategy', 'gameFilter', 'ipsetMode', 'fakeDiscord', 'fakeGame', 'lists']
+    const keys: (keyof ZapretConfig)[] = ['strategy', 'gameFilter', 'ipsetMode', 'fakeDiscord', 'fakeGame', 'lists', 'extraDomains']
     if (keys.some((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))) zapret.scheduleApply()
     return snapshot()
   })

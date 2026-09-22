@@ -27,7 +27,7 @@ import {
   Stethoscope
 } from 'lucide-react'
 import type { ZapretGameFilter, ZapretIpsetMode, ZapretLists, ZapretState } from '@shared/types'
-import { ZAPRET_REPO_URL, compareVersions, strategyLabel } from '@shared/zapret'
+import { EXTRA_DOMAIN_GROUPS, EXTRA_DOMAINS, ZAPRET_REPO_URL, compareVersions, strategyLabel } from '@shared/zapret'
 import { duration, plural, useStore } from '../store'
 import { Empty, Segmented, Setting, Switch } from '../ui'
 import { DiagnosticsModal, DiscordModal, HostsModal, ListModal, TestModal, type ListName } from './ZapretModals'
@@ -351,6 +351,18 @@ function Installed(): JSX.Element {
               <RefreshCw size={14} className={ipsetBusy ? 'spin' : ''} />
               Обновить с GitHub
             </button>
+          </div>
+        </Setting>
+
+        <Setting
+          title="Домены Prism"
+          hint={`${EXTRA_DOMAIN_GROUPS.map((g) => `${g.group}: ${g.note.toLowerCase()}`).join('. ')}. Этих доменов нет в списках сборки.`}
+        >
+          <div className="row" style={{ gap: 7 }}>
+            <button className="btn sm ghost" onClick={() => setList('extra')}>
+              Посмотреть
+            </button>
+            <Switch on={cfg.extraDomains} onChange={(v) => patchZapret({ extraDomains: v })} />
           </div>
         </Setting>
 
@@ -684,7 +696,8 @@ function ListsCard({ onView }: { onView: (n: ListName) => void }): JSX.Element {
             ['general', 'Discord, Cloudflare и DNS', pack.lists.general],
             ['google', 'YouTube и Google', pack.lists.google],
             ['exclude', 'Исключения', pack.lists.exclude],
-            ['ipsetExclude', 'Локальные сети', pack.lists.ipsetExclude]
+            ['ipsetExclude', 'Локальные сети', pack.lists.ipsetExclude],
+            ['extra', 'Домены Prism', EXTRA_DOMAINS.length]
           ] as [ListName, string, number][]
         ).map(([n, label, count]) => (
           <button key={n} className="chip" style={{ cursor: 'pointer' }} onClick={() => onView(n)}>

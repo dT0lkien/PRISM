@@ -47,6 +47,7 @@ import type {
 import {
   DEFAULT_TARGETS,
   DOMAIN_PLACEHOLDER,
+  EXTRA_DOMAINS,
   IPSET_PLACEHOLDER,
   ZAPRET_DPI_SUITE_URL,
   ZAPRET_RELEASE_API,
@@ -472,7 +473,10 @@ export class Zapret extends EventEmitter {
     for (const f of REQUIRED_LISTS) copyFileSync(join(pack.dir, 'lists', f), join(dir, f))
     // Пустой hostlist winws считает «подходит любой домен» — поэтому заглушки, как в сборке
     const l = cfg.lists
-    write('list-general-user.txt', l.general.length ? l.general : ['# Never leave this file empty', DOMAIN_PLACEHOLDER])
+    /* Домены Prism кладём в тот же файл, что и свои: список выбирается
+       аргументами стратегии, а их мы не трогаем — файлы сборки те же */
+    const general = [...(cfg.extraDomains ? EXTRA_DOMAINS : []), ...l.general]
+    write('list-general-user.txt', general.length ? general : ['# Never leave this file empty', DOMAIN_PLACEHOLDER])
     write('list-exclude-user.txt', l.exclude.length ? l.exclude : [DOMAIN_PLACEHOLDER])
     write('ipset-exclude-user.txt', l.ipsetExclude.length ? l.ipsetExclude : [IPSET_PLACEHOLDER])
     write('ipset-all.txt', ipsetContent(ipsetMode, ipsetMode === 'loaded' ? loadedIpset(pack) : [], l.ipset))
@@ -884,7 +888,8 @@ export class Zapret extends EventEmitter {
   }
 
   /** Встроенный список для просмотра. Большой ipset обрезаем — показать 30 тысяч строк нечем */
-  readList(name: 'general' | 'google' | 'exclude' | 'ipsetExclude' | 'ipset'): { lines: string[]; total: number } {
+  readList(name: 'general' | 'google' | 'exclude' | 'ipsetExclude' | 'ipset' | 'extra'): { lines: string[]; total: number } {
+    if (name === 'extra') return { lines: EXTRA_DOMAINS, total: EXTRA_DOMAINS.length }
     const pack = this.pack
     if (!pack) return { lines: [], total: 0 }
     const files = { general: 'list-general.txt', google: 'list-google.txt', exclude: 'list-exclude.txt', ipsetExclude: 'ipset-exclude.txt' }

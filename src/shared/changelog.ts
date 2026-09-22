@@ -13,6 +13,15 @@ export interface ReleaseNote {
 
 export const CHANGELOG: ReleaseNote[] = [
   {
+    version: '1.6.2',
+    date: '2026-09-22',
+    items: [
+      'Zapret чинит обложки Spotify и веб-версию Telegram: этих доменов не было в списках сборки',
+      'Домены Prism видно и можно выключить — на вкладке «Zapret», в «Фильтрах»',
+      'Telegram Desktop так не чинится: его дата-центры закрыты по IP, ему нужен VPN'
+    ]
+  },
+  {
     version: '1.6.1',
     date: '2026-09-17',
     items: [
