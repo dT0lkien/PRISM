@@ -19,7 +19,9 @@ files:
 
 # Общее для всех платформ. Ядро и помощник добавляются в секциях win/mac:
 # класть в сборку оба ядра — это лишняя сотня мегабайт, а helper нужен только
-# на macOS.
+# на macOS. Секции платформ electron-builder не подставляет вместо этой, а
+# ДОПИСЫВАЕТ к ней — правила и иконки там повторять нельзя: файлы копировались
+# дважды одновременно, и сборка под Windows изредка падала с EBUSY.
 extraResources:
   - from: resources/rules
     to: rules
@@ -39,12 +41,6 @@ win:
     - from: resources/core/win
       to: core
       filter: ['**/*']
-    - from: resources/rules
-      to: rules
-      filter: ['**/*.srs']
-    - from: resources/icons
-      to: icons
-      filter: ['**/*.png']
   artifactName: ${productName}-${version}-${arch}.${ext}
   target:
     - target: nsis
@@ -95,12 +91,6 @@ mac:
     - from: helper
       to: helper
       filter: ['install.sh', 'uninstall.sh', 'verify-install.sh']
-    - from: resources/rules
-      to: rules
-      filter: ['**/*.srs']
-    - from: resources/icons
-      to: icons
-      filter: ['**/*.png']
 
 dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}
