@@ -1899,6 +1899,26 @@ textarea.input {
 .table tr.zap-row {
   cursor: pointer;
 }
+/* Итог сервиса в таблице всех стратегий — цветная точка с подсказкой */
+.zap-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+/* Главный вывод теста — крупнее обычного пункта */
+.rule.zap-verdict {
+  padding: 14px 16px;
+  gap: 14px;
+}
+.zap-verdict b {
+  font-size: 15px;
+  font-weight: 620;
+}
+.zap-verdict .col > span {
+  font-size: 12.5px;
+}
 .table tr.zap-row.best td {
   background: color-mix(in oklab, var(--ok) 8%, transparent);
 }

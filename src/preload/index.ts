@@ -149,6 +149,8 @@ const api = {
     hostsApply: () => invoke<Result<{ info: ZapretHostsInfo }>>('zapret:hostsApply'),
     hostsRemove: () => invoke<Result<{ info: ZapretHostsInfo }>>('zapret:hostsRemove'),
     testStart: (kind: ZapretTestKind, ids: string[]) => invoke<Result>('zapret:testStart', kind, ids),
+    /** Выбрать стратегию и сразу включить с ней обход */
+    useStrategy: (id: string) => invoke<Result>('zapret:useStrategy', id),
     testCancel: () => invoke<void>('zapret:testCancel'),
     testState: () => invoke<ZapretTestProgress | null>('zapret:testState'),
     report: () => invoke<string>('zapret:report'),

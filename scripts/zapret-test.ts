@@ -21,9 +21,11 @@ import {
   hostsStatus,
   ipsetContent,
   mergeHosts,
+  TEST_SERVICES,
+  formatServicesReport,
   parseStrategy,
-  parseTargets,
   pickBest,
+  serviceStatus,
   removeHostsBlock,
   strategyLabel,
   summarizeStrategy,
@@ -32,7 +34,7 @@ import {
 import { unzip } from '../src/main/unzip'
 import { store } from '../src/main/store'
 import { zapret, zapretPaths } from '../src/main/zapret'
-import type { ZapretStrategyResult } from '../src/shared/types'
+import type { ZapretServiceResult, ZapretStrategyResult } from '../src/shared/types'
 
 let pass = 0
 let fail = 0
@@ -184,15 +186,37 @@ async function main(): Promise<void> {
 
   /* ─────────────────────────── тест стратегий ─────────────────────────── */
 
-  console.log('\n▸ Итоги теста')
+  console.log('\n▸ Итоги теста: DPI-чекеры')
   const res = (strategy: string, okN: number, pingOk: number, started = true): ZapretStrategyResult => ({
     strategy, started, ok: okN, error: 36 - okN, unsup: 0, blocked: 0, pingOk, pingFail: 4 - pingOk, targets: []
   })
   ok('лучшая — больше успехов', pickBest([res('a', 20, 4), res('b', 30, 1), res('c', 99, 4, false)]) === 'b')
-  ok('при равенстве решает пинг', pickBest([res('a', 30, 2), res('b', 30, 4)]) === 'b')
   ok('ни одной рабочей — нет лучшей', pickBest([res('a', 0, 4)]) === undefined)
-  ok('отчёт в формате утилиты сборки', formatReport('standard', [res('general', 30, 4)], 'general').includes('Best strategy: general.bat'))
-  ok('цели из targets.txt', parseTargets('A = "https://a.com/x"\nB = "PING:1.1.1.1"\n# c = "x"').map((t) => t.ping).join() === 'a.com,1.1.1.1')
+  ok('отчёт в формате утилиты сборки', formatReport('dpi', [res('general', 30, 4)], 'general').includes('Best strategy: general.bat'))
+
+  console.log('\n▸ Итоги теста: доступность сервисов')
+  const sv = (id: string, okN: number, total: number, ms = 300, any = false): ZapretServiceResult => ({
+    id, ok: okN, total, ms: okN ? ms : undefined, status: serviceStatus(okN, total, any), error: okN < total ? 'таймаут' : undefined,
+    checks: Array.from({ length: total }, (_, i) => ({ target: `${id}-${i}`, ok: i < okN, ms: i < okN ? ms : undefined, error: i < okN ? undefined : 'таймаут' }))
+  })
+  const withServices = (strategy: string, services: ZapretServiceResult[], started = true): ZapretStrategyResult => ({
+    ...res(strategy, 0, 0, started), services, ok: services.reduce((a, x) => a + x.ok, 0)
+  })
+  ok('сервис: всё прошло — открывается', serviceStatus(3, 3) === 'ok')
+  ok('сервис: часть — частично', serviceStatus(1, 3) === 'partial')
+  ok('приложению Telegram хватит одного дата-центра', serviceStatus(1, 3, true) === 'ok')
+  ok('сервис: ничего — не открывается', serviceStatus(0, 3) === 'fail')
+  ok('каждый сервис из списка проверяется', TEST_SERVICES.every((x) => x.checks.length > 0) && TEST_SERVICES.some((x) => x.id === 'telegram-app'))
+  const a = withServices('general (A)', [sv('youtube', 3, 3), sv('discord', 3, 3), sv('telegram-web', 0, 3)])
+  const b = withServices('general (B)', [sv('youtube', 3, 3), sv('discord', 2, 3), sv('telegram-web', 3, 3)])
+  const c = withServices('general (C)', [sv('youtube', 3, 3), sv('discord', 3, 3), sv('telegram-web', 3, 3)], false)
+  ok('лучшая — больше открывшихся сервисов', pickBest([a, b, c]) === 'general (B)', pickBest([a, b, c]))
+  const fast = withServices('general (F)', [sv('youtube', 3, 3, 100), sv('discord', 3, 3, 100)])
+  const slow = withServices('general (S)', [sv('youtube', 3, 3, 900), sv('discord', 3, 3, 900)])
+  ok('при равенстве — быстрее', pickBest([slow, fast]) === 'general (F)')
+  ok('не открылось ничего — лучшей нет', pickBest([withServices('general (Z)', [sv('youtube', 0, 3)])]) === undefined)
+  const report = formatServicesReport([sv('youtube', 0, 3)], [b], 'general (B)')
+  ok('отчёт: без обхода, лучшая и подробности', report.includes('Без обхода: YouTube — нет') && report.includes('Лучшая стратегия: B') && report.includes('discord-2: нет — таймаут'))
 
   /* ─────────────────────────── установка сборки ─────────────────────────── */
 

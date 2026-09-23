@@ -376,10 +376,28 @@ export interface ZapretTargetResult {
   ping?: string
 }
 
+export type ZapretServiceStatus = 'ok' | 'partial' | 'fail'
+
+/** Как открывается один сервис — YouTube, Discord, Telegram… */
+export interface ZapretServiceResult {
+  id: string
+  status: ZapretServiceStatus
+  /** Сколько проверок сервиса прошло из скольких */
+  ok: number
+  total: number
+  /** Среднее время удачных проверок, мс */
+  ms?: number
+  /** Почему не открылось — по-человечески: «таймаут», «сброс соединения» */
+  error?: string
+  checks: { target: string; ok: boolean; ms?: number; error?: string }[]
+}
+
 export interface ZapretStrategyResult {
   strategy: string
   /** winws.exe поднялся с этой стратегией */
   started: boolean
+  /** Итог по сервисам — у обычной проверки доступности */
+  services?: ZapretServiceResult[]
   ok: number
   error: number
   unsup: number
@@ -392,6 +410,13 @@ export interface ZapretStrategyResult {
 export interface ZapretTestProgress {
   running: boolean
   kind: ZapretTestKind
+  /** baseline — замер без обхода, strategies — перебор стратегий, restore — возвращаем VPN и обход */
+  phase?: 'baseline' | 'strategies' | 'restore'
+  startedAt?: number
+  /** Что открывается без обхода — с этим сравниваются стратегии */
+  baseline?: ZapretServiceResult[]
+  /** Что Prism приостановил на время теста и вернёт после */
+  paused?: ('vpn' | 'service' | 'zapret')[]
   total: number
   done: number
   current?: string
@@ -407,7 +432,7 @@ export interface ZapretTestSummary {
   kind: ZapretTestKind
   at: number
   best?: string
-  /** стратегия → «сколько проверок прошло из скольких» */
+  /** стратегия → сколько сервисов открылось из скольких (у DPI-чекеров — проверок) */
   scores: Record<string, { ok: number; total: number }>
 }
 

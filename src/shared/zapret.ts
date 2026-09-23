@@ -6,7 +6,15 @@
    команду, подставляет свои пути и сам стартует winws.exe. Так не нужен
    service.bat, который правит файлы сборки на месте, и не нужна консоль. */
 
-import type { ZapretConfig, ZapretGameFilter, ZapretIpsetMode, ZapretStrategyResult, ZapretTestKind } from './types'
+import type {
+  ZapretConfig,
+  ZapretGameFilter,
+  ZapretIpsetMode,
+  ZapretServiceResult,
+  ZapretServiceStatus,
+  ZapretStrategyResult,
+  ZapretTestKind
+} from './types'
 
 export const ZAPRET_REPO = 'Flowseal/zapret-discord-youtube'
 export const ZAPRET_REPO_URL = `https://github.com/${ZAPRET_REPO}`
@@ -371,49 +379,133 @@ export function removeHostsBlock(current: string): string {
 
 /* ─────────────────────────── тесты ─────────────────────────── */
 
-/** Цели обычного теста из utils/targets.txt: Имя = "https://…" или "PING:1.2.3.4" */
-export function parseTargets(text: string): { name: string; url?: string; ping: string }[] {
-  const out: { name: string; url?: string; ping: string }[] = []
-  for (const line of text.replace(/\r/g, '').split('\n')) {
-    const m = line.match(/^\s*(\w+)\s*=\s*"(.+)"\s*$/)
-    if (!m) continue
-    const v = m[2].trim()
-    if (/^PING:/i.test(v)) out.push({ name: m[1], ping: v.replace(/^PING:\s*/i, '') })
-    else if (/^https?:\/\//i.test(v)) out.push({ name: m[1], url: v, ping: v.replace(/^https?:\/\//i, '').replace(/[/:].*$/, '') })
-  }
-  return out
+/* ─────────────────────────── проверка доступности ─────────────────────────── */
+
+export type ServiceCheck = { kind: 'load'; url: string } | { kind: 'tcp'; host: string; port: number }
+
+export interface TestService {
+  id: string
+  name: string
+  /** Сервис работает, если прошла хоть одна проверка — приложению Telegram хватит любого дата-центра */
+  any?: boolean
+  checks: ServiceCheck[]
 }
 
-export const DEFAULT_TARGETS = parseTargets(`
-DiscordMain = "https://discord.com"
-DiscordGateway = "https://gateway.discord.gg"
-DiscordCDN = "https://cdn.discordapp.com"
-DiscordUpdates = "https://updates.discord.com"
-YouTubeWeb = "https://www.youtube.com"
-YouTubeShort = "https://youtu.be"
-YouTubeImage = "https://i.ytimg.com"
-YouTubeVideoRedirect = "https://redirector.googlevideo.com"
-GoogleMain = "https://www.google.com"
-GoogleGstatic = "https://www.gstatic.com"
-CloudflareWeb = "https://www.cloudflare.com"
-CloudflareCDN = "https://cdnjs.cloudflare.com"
-CloudflareDNS1111 = "PING:1.1.1.1"
-CloudflareDNS1001 = "PING:1.0.0.1"
-GoogleDNS8888 = "PING:8.8.8.8"
-GoogleDNS8844 = "PING:8.8.4.4"
-`)
+const load = (url: string): ServiceCheck => ({ kind: 'load', url })
+const tcp = (host: string, port = 443): ServiceCheck => ({ kind: 'tcp', host, port })
 
 /**
- * Лучшая стратегия — как в утилите сборки: больше всего успешных проверок,
- * при равенстве — больше ответивших пингов. Не поднявшиеся не участвуют.
+ * Что проверяет кнопка «Тест». Не адреса, а сервисы, ради которых ставят
+ * zapret: пользователю нужен ответ «YouTube открывается», а не «TLS1.2:OK».
+ * Страницы берутся большие (YouTube, Discord, jQuery) — на них видно, если
+ * провайдер «замораживает» соединение после первых 16–20 КБ.
+ */
+export const TEST_SERVICES: TestService[] = [
+  {
+    id: 'youtube',
+    name: 'YouTube',
+    checks: [load('https://www.youtube.com/'), load('https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg'), load('https://redirector.googlevideo.com/')]
+  },
+  {
+    id: 'discord',
+    name: 'Discord',
+    checks: [load('https://discord.com/'), load('https://gateway.discord.gg/'), load('https://cdn.discordapp.com/embed/avatars/0.png')]
+  },
+  {
+    id: 'telegram-web',
+    name: 'Telegram: сайт и веб-версия',
+    checks: [load('https://web.telegram.org/k/'), load('https://telegram.org/'), load('https://t.me/telegram')]
+  },
+  {
+    /* Приложение ходит в дата-центры по своему протоколу, без имени сайта.
+       Если до них не доходит даже TCP — это блокировка по адресу, и обход,
+       который правит содержимое пакетов, тут бессилен */
+    id: 'telegram-app',
+    name: 'Telegram: приложение',
+    any: true,
+    checks: [tcp('149.154.167.51'), tcp('149.154.175.50'), tcp('91.108.56.130')]
+  },
+  {
+    id: 'spotify',
+    name: 'Spotify: обложки и сайт',
+    checks: [load('https://i.scdn.co/image/ab67616d0000b2734ce8b4e42588bf18182a1ad2'), load('https://open.spotify.com/')]
+  },
+  {
+    id: 'cloudflare',
+    name: 'Сайты за Cloudflare',
+    checks: [load('https://www.cloudflare.com/'), load('https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js')]
+  }
+]
+
+/** Сайт, который обход не трогает: не открылся и он — значит, нет интернета вообще */
+export const CONTROL_URL = 'https://ya.ru/'
+
+export const serviceName = (id: string): string => TEST_SERVICES.find((s) => s.id === id)?.name ?? id
+
+export const checkLabel = (c: ServiceCheck): string =>
+  c.kind === 'tcp' ? `${c.host}:${c.port}` : c.url.replace(/^https:\/\//, '').replace(/\/$/, '')
+
+export function serviceStatus(ok: number, total: number, any = false): ZapretServiceStatus {
+  if (ok === 0) return 'fail'
+  return ok === total || any ? 'ok' : 'partial'
+}
+
+/** Очки стратегии: открывшийся сервис — 2, открывшийся частично — 1 */
+export const serviceScore = (services: ZapretServiceResult[] = []): number =>
+  services.reduce((a, s) => a + (s.status === 'ok' ? 2 : s.status === 'partial' ? 1 : 0), 0)
+
+const avgMs = (services: ZapretServiceResult[] = []): number => {
+  const ms = services.map((s) => s.ms).filter((x): x is number => x !== undefined)
+  return ms.length ? ms.reduce((a, b) => a + b, 0) / ms.length : Infinity
+}
+
+/**
+ * Лучшая стратегия. У проверки доступности — больше открывшихся сервисов,
+ * при равенстве — больше прошедших проверок, затем быстрее. У DPI-чекеров —
+ * как в утилите сборки: больше успешных проверок. Не поднявшиеся и те, с
+ * которыми не открылось ничего, не участвуют.
  */
 export function pickBest(results: ZapretStrategyResult[]): string | undefined {
+  const key = (r: ZapretStrategyResult): number[] =>
+    r.services ? [serviceScore(r.services), r.services.reduce((a, s) => a + s.ok, 0), -avgMs(r.services)] : [r.ok, r.pingOk, 0]
+  // Сравнение по очереди: первое различие решает
+  const cmp = (a: number[], b: number[]): number => {
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] > b[i] ? 1 : -1
+    return 0
+  }
   let best: ZapretStrategyResult | undefined
+  let bestKey: number[] = []
   for (const r of results) {
-    if (!r.started || r.ok === 0) continue
-    if (!best || r.ok > best.ok || (r.ok === best.ok && r.pingOk > best.pingOk)) best = r
+    const k = key(r)
+    if (!r.started || k[0] <= 0) continue
+    if (!best || cmp(k, bestKey) > 0) {
+      best = r
+      bestKey = k
+    }
   }
   return best?.strategy
+}
+
+/** Отчёт проверки доступности — чтобы им можно было поделиться */
+export function formatServicesReport(baseline: ZapretServiceResult[] | undefined, results: ZapretStrategyResult[], best?: string): string {
+  const mark = (s: ZapretServiceResult): string => (s.status === 'ok' ? 'да' : s.status === 'partial' ? 'частично' : 'нет')
+  const line = (list: ZapretServiceResult[]): string =>
+    list.map((s) => `${serviceName(s.id)} — ${mark(s)}${s.status !== 'ok' && s.error ? ` (${s.error})` : ''}`).join('; ')
+  const out = ['Prism — проверка доступности через zapret', '']
+  if (baseline) out.push(`Без обхода: ${line(baseline)}`)
+  out.push(`Лучшая стратегия: ${best ? strategyLabel(best) : 'не нашлась'}`, '')
+  for (const r of results) {
+    if (!r.started) {
+      out.push(`${strategyLabel(r.strategy)}: не запустилась`)
+      continue
+    }
+    const ok = r.services?.filter((s) => s.status === 'ok').length ?? 0
+    out.push(`${strategyLabel(r.strategy)} — ${ok} из ${r.services?.length ?? 0}: ${line(r.services ?? [])}`)
+    for (const s of r.services ?? []) {
+      for (const c of s.checks) out.push(`    ${c.target}: ${c.ok ? `да, ${c.ms} мс` : `нет — ${c.error ?? 'ошибка'}`}`)
+    }
+  }
+  return out.join('\r\n')
 }
 
 /** Отчёт в том же виде, что пишет «test zapret.ps1» — чтобы им можно было делиться в обсуждениях сборки */

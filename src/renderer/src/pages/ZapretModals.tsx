@@ -1,9 +1,13 @@
 /* Окна инструментов zapret: диагностика, тест стратегий, hosts, кэш Discord, просмотр списков */
 
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  CirclePlay,
+  Cloud,
   Copy,
   Eraser,
   ExternalLink,
@@ -11,15 +15,31 @@ import {
   FolderOpen,
   Gauge,
   List,
+  MessageCircle,
+  Music,
+  Pause,
   Play,
   RefreshCw,
+  Route,
+  Send,
+  Settings2,
+  Smartphone,
   Square,
   Stethoscope,
   Wrench,
-  XCircle
+  XCircle,
+  Zap
 } from 'lucide-react'
-import type { ZapretCheck, ZapretCheckStatus, ZapretHostsInfo, ZapretStrategyResult, ZapretTestKind } from '@shared/types'
-import { strategyLabel } from '@shared/zapret'
+import type {
+  ZapretCheck,
+  ZapretCheckStatus,
+  ZapretHostsInfo,
+  ZapretServiceResult,
+  ZapretServiceStatus,
+  ZapretStrategyResult,
+  ZapretTestKind
+} from '@shared/types'
+import { serviceName, serviceScore, strategyLabel } from '@shared/zapret'
 import { plural, useStore } from '../store'
 import { Modal, Segmented } from '../ui'
 
@@ -223,6 +243,18 @@ function ResetModal({ open, onClose }: { open: boolean; onClose: () => void }): 
 
 /* ─────────────── тест стратегий ─────────────── */
 
+const SERVICE_ICON: Record<string, typeof Cloud> = {
+  youtube: CirclePlay,
+  discord: MessageCircle,
+  'telegram-web': Send,
+  'telegram-app': Smartphone,
+  spotify: Music,
+  cloudflare: Cloud
+}
+
+const STATUS_TEXT: Record<ZapretServiceStatus, string> = { ok: 'открывается', partial: 'частично', fail: 'не открывается' }
+const STATUS_CLS: Record<ZapretServiceStatus, string> = { ok: 'ok', partial: 'warn', fail: 'err' }
+
 const CHECK_CLS: Record<ZapretCheckStatus, string> = {
   ok: 'ok',
   unsup: 'warn',
@@ -232,29 +264,82 @@ const CHECK_CLS: Record<ZapretCheckStatus, string> = {
   fail: 'err'
 }
 
-const score = (r: ZapretStrategyResult): number => (r.started ? r.ok * 1000 + r.pingOk : -1)
+const sec = (ms?: number): string => (ms === undefined ? '' : `${(ms / 1000).toFixed(1).replace('.', ',')} с`)
+const okCount = (r: ZapretStrategyResult): number => r.services?.filter((s) => s.status === 'ok').length ?? 0
+const rank = (r: ZapretStrategyResult): number =>
+  r.started ? (r.services ? serviceScore(r.services) * 1000 + r.services.reduce((a, s) => a + s.ok, 0) : r.ok * 1000 + r.pingOk) : -1
+
+function StatusChip({ s, compact }: { s?: ZapretServiceResult; compact?: boolean }): JSX.Element {
+  if (!s) return <span className="dim">—</span>
+  return (
+    <span className={`chip ${STATUS_CLS[s.status]}`} title={s.status !== 'ok' ? s.error : undefined} style={compact ? { padding: '1px 8px', fontSize: 11 } : undefined}>
+      {STATUS_TEXT[s.status]}
+      {s.status === 'ok' && s.ms !== undefined && !compact && <span className="dim tnum">· {sec(s.ms)}</span>}
+    </span>
+  )
+}
+
+/** Точка в таблице всех стратегий: цвет — итог сервиса, подсказка — название */
+function Dot({ s }: { s: ZapretServiceResult }): JSX.Element {
+  const color = s.status === 'ok' ? 'var(--ok)' : s.status === 'partial' ? 'var(--warn)' : 'var(--err)'
+  return <i className="zap-dot" style={{ background: color }} title={`${serviceName(s.id)}: ${STATUS_TEXT[s.status]}${s.error && s.status !== 'ok' ? ` — ${s.error}` : ''}`} />
+}
+
+/** Что Prism выключил на время теста — в винительном падеже, для «выключил …» и «включаю обратно …» */
+const PAUSED_NAME = { vpn: 'VPN', service: 'службу zapret', zapret: 'обход' } as const
 
 export function TestModal({ open, onClose }: { open: boolean; onClose: () => void }): JSX.Element {
   const z = useStore((s) => s.zapret)
   const test = useStore((s) => s.zapretTest)
-  const core = useStore((s) => s.core)
+  const cfg = useStore((s) => s.snap.zapret)
   const patchZapret = useStore((s) => s.patchZapret)
+  const setPage = useStore((s) => s.setPage)
   const toast = useStore((s) => s.toast)
   const strategies = z.pack?.strategies ?? []
+  const [setup, setSetup] = useState(false)
   const [kind, setKind] = useState<ZapretTestKind>('standard')
   const [picked, setPicked] = useState<Set<string> | null>(null)
-  const [setup, setSetup] = useState(true)
+  const [error, setError] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
-  const [starting, setStarting] = useState(false)
+  const [showAll, setShowAll] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [, tick] = useState(0)
+  const launched = useRef(false)
 
   const selected = picked ?? new Set(strategies.map((s) => s.id))
   const running = !!test?.running
-  const showSetup = !running && (setup || !test)
 
-  // Открыли окно, пока тест идёт или уже закончился, — сразу к результатам
+  const run = async (k: ZapretTestKind = 'standard', ids: string[] = []): Promise<void> => {
+    setBusy(true)
+    setError('')
+    setSetup(false)
+    setExpanded(null)
+    setShowAll(false)
+    try {
+      const r = await window.prism.zapret.testStart(k, ids)
+      if (!r.ok) setError(r.error)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Нажали «Тест» — значит, тест: запускаем сразу, без экрана настроек
   useEffect(() => {
-    if (open && test && (test.running || test.results.length)) setSetup(false)
+    if (!open) {
+      launched.current = false
+      return
+    }
+    if (launched.current) return
+    launched.current = true
+    if (!useStore.getState().zapretTest?.running) void run()
   }, [open])
+
+  // Пока идёт тест — раз в секунду обновляем «осталось примерно»
+  useEffect(() => {
+    if (!running) return
+    const t = setInterval(() => tick((n) => n + 1), 1000)
+    return () => clearInterval(t)
+  }, [running])
 
   const toggle = (id: string): void => {
     const next = new Set(selected)
@@ -263,256 +348,482 @@ export function TestModal({ open, onClose }: { open: boolean; onClose: () => voi
     setPicked(next)
   }
 
-  const start = async (): Promise<void> => {
-    setStarting(true)
+  const useBest = async (id: string): Promise<void> => {
+    setBusy(true)
     try {
-      const r = await window.prism.zapret.testStart(kind, [...selected])
+      const r = await window.prism.zapret.useStrategy(id)
       if (r.ok) {
-        setSetup(false)
-        setExpanded(null)
+        toast('ok', `Обход включён со стратегией ${strategyLabel(id)}`)
+        onClose()
       } else toast('error', r.error)
     } finally {
-      setStarting(false)
+      setBusy(false)
     }
   }
 
-  const rows = useMemo(() => [...(test?.results ?? [])].sort((a, b) => score(b) - score(a)), [test])
-  const tunOn = core.status === 'running' && core.captureMode === 'tun'
-  const perStrategy = kind === 'standard' ? 8 : 25
-  const minutes = Math.max(1, Math.round((selected.size * perStrategy) / 60))
+  const rows = useMemo(() => [...(test?.results ?? [])].sort((a, b) => rank(b) - rank(a)), [test])
+  const best = test?.best ? test.results.find((r) => r.strategy === test.best) : undefined
+  const services = test?.kind === 'standard'
 
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      wide
-      title="Тест стратегий"
-      icon={<Gauge size={18} className="mut" />}
-      footer={
-        showSetup ? (
-          <>
-            {test && test.results.length > 0 && (
-              <button className="btn ghost" style={{ marginRight: 'auto' }} onClick={() => setSetup(false)}>
-                Прошлые результаты
-              </button>
-            )}
-            <button className="btn primary" disabled={starting || !selected.size || !z.elevated} onClick={start}>
-              {starting ? <RefreshCw size={15} className="spin" /> : <Play size={15} />}
-              Запустить тест
-            </button>
-          </>
-        ) : running ? (
-          <button className="btn" onClick={() => window.prism.zapret.testCancel()}>
-            <Square size={14} />
-            Остановить
-          </button>
-        ) : (
-          <>
-            <button
-              className="btn icon ghost"
-              title="Скопировать отчёт"
-              disabled={!test?.file}
-              onClick={async () => {
-                await window.prism.system.clipboardWrite(await window.prism.zapret.report())
-                toast('ok', 'Отчёт скопирован — его можно приложить к обсуждению на GitHub сборки')
-              }}
-            >
-              <Copy size={15} />
-            </button>
-            <button className="btn icon ghost" title="Папка с отчётами" onClick={() => window.prism.zapret.openReports()}>
-              <FolderOpen size={15} />
-            </button>
-            <button className="btn" style={{ marginRight: 'auto' }} onClick={() => setSetup(true)}>
-              Новый тест
-            </button>
-            {test?.best && (
-              <button
-                className="btn primary"
-                onClick={async () => {
-                  await patchZapret({ strategy: test.best! })
-                  toast('ok', `Выбрана стратегия ${strategyLabel(test.best!)}`)
-                  onClose()
-                }}
-              >
-                <CheckCircle2 size={15} />
-                Применить {strategyLabel(test.best)}
-              </button>
-            )}
-          </>
-        )
-      }
-    >
-      {showSetup ? (
-        <>
-          <Segmented<ZapretTestKind>
-            id="zap-test-kind"
-            value={kind}
-            onChange={setKind}
-            options={[
-              { value: 'standard', label: 'Сайты и пинг' },
-              { value: 'dpi', label: 'DPI-чекеры' }
-            ]}
-          />
-          <p className="mut" style={note}>
-            {kind === 'standard'
-              ? 'С каждой стратегией Prism открывает Discord, YouTube, Google и Cloudflare по HTTP, TLS 1.2 и TLS 1.3 и пингует публичные DNS. Лучшая — где открылось больше всего.'
-              : 'Проверка на «заморозку» после 16–20 КБ: так провайдеры режут соединения с зарубежными хостингами. Prism гоняет данные к серверам разных провайдеров из набора hyperion-cs/dpi-checkers. На время теста IPSet переключается на «любой IP».'}
-          </p>
+  /* ── что показывать ── */
+  let body: JSX.Element
+  let footer: JSX.Element
 
-          <div className="col" style={{ gap: 8 }}>
-            <div className="row" style={{ gap: 8 }}>
-              <b style={{ fontSize: 13 }}>Стратегии</b>
-              <span className="dim tnum" style={{ fontSize: 12 }}>
-                {selected.size} из {strategies.length} · около {minutes} мин
-              </span>
-              <span className="grow" />
-              <button className="btn sm ghost" onClick={() => setPicked(new Set(strategies.map((s) => s.id)))}>
-                Все
-              </button>
-              <button className="btn sm ghost" onClick={() => setPicked(new Set())}>
-                Ни одной
-              </button>
-            </div>
-            <div className="row wrap" style={{ gap: 6 }}>
-              {strategies.map((s) => (
-                <button key={s.id} className={`chip${selected.has(s.id) ? ' acc' : ''}`} style={{ cursor: 'pointer' }} onClick={() => toggle(s.id)}>
-                  {s.label}
-                </button>
-              ))}
-            </div>
+  if (setup) {
+    body = (
+      <>
+        <Segmented<ZapretTestKind>
+          id="zap-test-kind"
+          value={kind}
+          onChange={setKind}
+          options={[
+            { value: 'standard', label: 'Доступность сервисов' },
+            { value: 'dpi', label: 'DPI-чекеры' }
+          ]}
+        />
+        <p className="mut" style={note}>
+          {kind === 'standard'
+            ? 'То же, что по кнопке «Тест», но можно выбрать стратегии — например, перепроверить две-три лучшие.'
+            : 'Для опытных: проверка «заморозки» после 16–20 КБ на серверах разных хостингов из набора hyperion-cs/dpi-checkers. На время теста IPSet переключается на «любой IP». Идёт заметно дольше.'}
+        </p>
+        <div className="col" style={{ gap: 8 }}>
+          <div className="row" style={{ gap: 8 }}>
+            <b style={{ fontSize: 13 }}>Стратегии</b>
+            <span className="dim tnum" style={{ fontSize: 12 }}>
+              {selected.size} из {strategies.length}
+            </span>
+            <span className="grow" />
+            <button className="btn sm ghost" onClick={() => setPicked(new Set(strategies.map((s) => s.id)))}>
+              Все
+            </button>
+            <button className="btn sm ghost" onClick={() => setPicked(new Set())}>
+              Ни одной
+            </button>
           </div>
-
+          <div className="row wrap" style={{ gap: 6 }}>
+            {strategies.map((s) => (
+              <button key={s.id} className={`chip${selected.has(s.id) ? ' acc' : ''}`} style={{ cursor: 'pointer' }} onClick={() => toggle(s.id)}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </>
+    )
+    footer = (
+      <>
+        <button className="btn ghost" style={{ marginRight: 'auto' }} onClick={() => setSetup(false)}>
+          Назад
+        </button>
+        <button className="btn primary" disabled={busy || !selected.size} onClick={() => run(kind, [...selected])}>
+          <Play size={15} />
+          Запустить
+        </button>
+      </>
+    )
+  } else if (error && !running) {
+    const needAdmin = /администратор/i.test(error)
+    const foreign = /сторонний winws/i.test(error)
+    body = (
+      <div className="rule zap-check">
+        <span className="ic">
+          <XCircle size={17} color="var(--err)" />
+        </span>
+        <div className="grow col">
+          <b>Тест не запустился</b>
+          <span>{error}</span>
+        </div>
+        {needAdmin && (
+          <button className="btn sm" onClick={() => window.prism.core.elevate()}>
+            Перезапустить от администратора
+          </button>
+        )}
+        {foreign && (
+          <button
+            className="btn sm"
+            onClick={async () => {
+              const r = await window.prism.zapret.killForeign()
+              if (r.ok) void run()
+              else toast('error', r.error)
+            }}
+          >
+            Остановить и проверить
+          </button>
+        )}
+      </div>
+    )
+    footer = (
+      <>
+        <button className="btn ghost" style={{ marginRight: 'auto' }} onClick={() => setSetup(true)}>
+          <Settings2 size={15} />
+          Настроить…
+        </button>
+        <button className="btn primary" disabled={busy} onClick={() => run()}>
+          <RefreshCw size={15} className={busy ? 'spin' : ''} />
+          Проверить снова
+        </button>
+      </>
+    )
+  } else if (!test || (busy && !running)) {
+    body = (
+      <div className="row mut" style={{ ...note, justifyContent: 'center', padding: 30 }}>
+        <RefreshCw size={16} className="spin" />
+        Готовлю проверку…
+      </div>
+    )
+    footer = <></>
+  } else if (running) {
+    const elapsed = Date.now() - (test.startedAt ?? Date.now())
+    const left = test.done > 0 ? Math.max(0, Math.round(((elapsed / test.done) * (test.total - test.done)) / 60000)) : undefined
+    const phase =
+      test.phase === 'baseline'
+        ? 'Смотрю, что открывается без обхода…'
+        : test.phase === 'restore'
+          ? `Включаю обратно ${(test.paused ?? []).map((p) => PAUSED_NAME[p]).join(' и ')}…`
+          : `Пробую стратегию ${strategyLabel(test.current ?? '')} · ${Math.min(test.done + 1, test.total)} из ${test.total}`
+    const bestNow = test.best ? test.results.find((r) => r.strategy === test.best) : undefined
+    body = (
+      <>
+        <div className="col" style={{ gap: 8 }}>
+          <div className="row" style={{ gap: 10 }}>
+            <b style={{ fontSize: 13.5 }}>{phase}</b>
+            <span className="grow" />
+            {test.phase === 'strategies' && (
+              <span className="dim tnum" style={{ fontSize: 12 }}>
+                {left === undefined ? 'считаю время…' : left < 1 ? 'меньше минуты' : `осталось около ${left} мин`}
+              </span>
+            )}
+          </div>
+          <div className="zap-progress">
+            <i style={{ width: `${test.total ? (test.done / test.total) * 100 : 0}%` }} />
+          </div>
+        </div>
+        {!!test.paused?.length && (
           <div className="upd-notes zap-note">
-            <RefreshCw size={16} />
+            <Pause size={16} />
             <span className="grow">
-              Обход перезапускается с каждой стратегией по очереди, так что интернет может ненадолго пропадать. Если обход сейчас
-              запущен, после теста он вернётся.
+              На время проверки Prism выключил {test.paused.map((p) => PAUSED_NAME[p]).join(' и ')} — включит обратно сам, когда закончит.
             </span>
           </div>
-          {tunOn && (
-            <div className="upd-notes zap-note warn">
-              <AlertTriangle size={16} />
-              <span className="grow">VPN работает в режиме TUN — отключите его на время теста, иначе проверится туннель, а не стратегия.</span>
-            </div>
-          )}
-          {z.service.installed && (
-            <div className="upd-notes zap-note warn">
-              <AlertTriangle size={16} />
-              <span className="grow">Установлена служба zapret — удалите её на время теста, стратегии запускаются по одной.</span>
-            </div>
-          )}
-        </>
-      ) : (
-        test && (
+        )}
+        {services && test.baseline && (
+          <ServiceTable baseline={test.baseline} withLabel={bestNow ? `Лучшая пока — ${strategyLabel(bestNow.strategy)}` : 'Лучшая пока'} withServices={bestNow?.services} compact />
+        )}
+        {!services && rows.length > 0 && <DpiTable rows={rows} best={test.best} expanded={expanded} setExpanded={setExpanded} />}
+      </>
+    )
+    footer = (
+      <button className="btn" onClick={() => window.prism.zapret.testCancel()} disabled={test.phase === 'restore'}>
+        <Square size={14} />
+        Остановить
+      </button>
+    )
+  } else {
+    /* ── итог ── */
+    const base = test.baseline ?? []
+    const fixed = services && best ? best.services!.filter((s) => s.status === 'ok' && base.find((b) => b.id === s.id)?.status !== 'ok') : []
+    const failing = services && best ? best.services!.filter((s) => s.status !== 'ok') : []
+    const appBlocked = failing.some((s) => s.id === 'telegram-app') && base.find((b) => b.id === 'telegram-app')?.status === 'fail'
+    const needExtra = !cfg.extraDomains && failing.some((s) => s.id === 'telegram-web' || s.id === 'spotify')
+    const names = (l: ZapretServiceResult[]): string => l.map((s) => serviceName(s.id)).join(', ')
+
+    body = (
+      <>
+        {test.error && (
+          <div className="upd-notes zap-note warn">
+            <AlertTriangle size={16} />
+            <span className="grow">{test.error}</span>
+          </div>
+        )}
+        {services ? (
           <>
-            <div className="col" style={{ gap: 8 }}>
-              <div className="row" style={{ gap: 10 }}>
-                <b style={{ fontSize: 13.5 }}>
-                  {running
-                    ? `Проверяю ${strategyLabel(test.current ?? '')}…`
-                    : test.error
-                      ? 'Тест прерван'
-                      : test.best
-                        ? `Лучшая стратегия — ${strategyLabel(test.best)}`
-                        : 'Ни одна стратегия не прошла проверки'}
+            <div className="rule zap-check zap-verdict">
+              <span className="ic">
+                {!best ? (
+                  <XCircle size={22} color="var(--err)" />
+                ) : failing.length ? (
+                  <AlertTriangle size={22} color="var(--warn)" />
+                ) : (
+                  <CheckCircle2 size={22} color="var(--ok)" />
+                )}
+              </span>
+              <div className="grow col">
+                <b>
+                  {!best
+                    ? 'Ни одна стратегия не помогла'
+                    : failing.length
+                      ? `Лучшая стратегия — ${strategyLabel(best.strategy)}`
+                      : `Всё открывается со стратегией ${strategyLabel(best.strategy)}`}
                 </b>
-                <span className="grow" />
-                <span className="dim tnum" style={{ fontSize: 12 }}>
-                  {test.done} из {test.total} · {test.kind === 'standard' ? 'сайты и пинг' : 'DPI-чекеры'}
+                <span>
+                  {!best
+                    ? 'Загляните в «Диагностику»: чаще всего мешает другой обход, VPN или антивирус.'
+                    : [
+                        fixed.length ? `Обход открыл: ${names(fixed)}.` : 'Всё, что открывается, открывается и без обхода.',
+                        failing.length ? `Не открывается: ${names(failing)}.` : ''
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
                 </span>
-              </div>
-              <div className="zap-progress">
-                <i style={{ width: `${test.total ? (test.done / test.total) * 100 : 0}%` }} />
               </div>
             </div>
 
-            {test.error && (
+            {best && <ServiceTable baseline={base} withLabel={`Со стратегией ${strategyLabel(best.strategy)}`} withServices={best.services} />}
+
+            {appBlocked && (
+              <div className="upd-notes zap-note warn">
+                <Smartphone size={16} />
+                <span className="grow">
+                  Приложение Telegram не пускают к его серверам по адресу. Обход меняет только содержимое пакетов и тут бессилен: нужен VPN
+                  (пресет Telegram на вкладке «Маршруты») или MTProto-прокси в настройках самого Telegram. Сайт и веб-версию обход открывает.
+                </span>
+                <button
+                  className="btn sm"
+                  onClick={() => {
+                    onClose()
+                    setPage('routing')
+                  }}
+                >
+                  <Route size={14} />
+                  Маршруты
+                </button>
+              </div>
+            )}
+            {needExtra && (
               <div className="upd-notes zap-note warn">
                 <AlertTriangle size={16} />
-                <span className="grow">{test.error}</span>
+                <span className="grow">Выключены «Домены Prism» — без них обход не трогает Telegram и Spotify.</span>
+                <button className="btn sm" onClick={() => patchZapret({ extraDomains: true }).then(() => run())}>
+                  Включить и проверить
+                </button>
               </div>
             )}
 
             {rows.length > 0 && (
-              <div className="card" style={{ overflow: 'hidden' }}>
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Стратегия</th>
-                      <th style={{ textAlign: 'right' }}>Успешно</th>
-                      <th style={{ textAlign: 'right' }}>Ошибки</th>
-                      <th style={{ textAlign: 'right' }}>Без поддержки</th>
-                      <th style={{ textAlign: 'right' }}>{test.kind === 'standard' ? 'Пинг' : 'Заморозка'}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((r) => (
-                      <Fragment key={r.strategy}>
-                        <tr
-                          className={`zap-row${r.strategy === test.best ? ' best' : ''}`}
-                          onClick={() => setExpanded(expanded === r.strategy ? null : r.strategy)}
-                        >
-                          <td>
-                            <div className="row" style={{ gap: 8 }}>
-                              <b style={{ fontWeight: 560 }}>{strategyLabel(r.strategy)}</b>
-                              {r.strategy === test.best && <span className="chip ok">лучшая</span>}
-                              {!r.started && <span className="chip err">не запустилась</span>}
-                            </div>
-                          </td>
-                          <td className="tnum" style={{ textAlign: 'right', color: r.ok ? 'var(--ok)' : undefined }}>
-                            {r.ok}
-                          </td>
-                          <td className="tnum" style={{ textAlign: 'right', color: r.error ? 'var(--err)' : undefined }}>
-                            {r.error}
-                          </td>
-                          <td className="tnum dim" style={{ textAlign: 'right' }}>
-                            {r.unsup}
-                          </td>
-                          <td className="tnum" style={{ textAlign: 'right' }}>
-                            {!r.started ? '—' : test.kind === 'standard' ? `${r.pingOk}/${r.pingOk + r.pingFail}` : r.blocked}
-                          </td>
-                        </tr>
-                        {expanded === r.strategy && (
-                          <tr>
-                            <td colSpan={5} style={{ background: 'var(--panel)' }}>
-                              <div className="col" style={{ gap: 6, padding: '4px 0' }}>
-                                {r.targets.map((t) => (
-                                  <div key={t.name} className="row wrap" style={{ gap: 6 }}>
-                                    <span className="ell" style={{ width: 210, fontSize: 12 }} title={t.name}>
-                                      {t.name}
-                                    </span>
-                                    {t.checks.map((c) => (
-                                      <span key={c.label} className={`chip ${CHECK_CLS[c.status]}`} title={c.detail} style={{ padding: '1px 7px', fontSize: 10.5 }}>
-                                        {c.label}
-                                      </span>
+              <>
+                <button className="btn sm ghost" style={{ alignSelf: 'flex-start' }} onClick={() => setShowAll(!showAll)}>
+                  {showAll ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  Все стратегии · {rows.length}
+                </button>
+                {showAll && (
+                  <div className="card" style={{ overflow: 'hidden' }}>
+                    <table className="table">
+                      <tbody>
+                        {rows.map((r) => (
+                          <Fragment key={r.strategy}>
+                            <tr className={`zap-row${r.strategy === test.best ? ' best' : ''}`} onClick={() => setExpanded(expanded === r.strategy ? null : r.strategy)}>
+                              <td style={{ width: 170 }}>
+                                <b style={{ fontWeight: 560 }}>{strategyLabel(r.strategy)}</b>
+                              </td>
+                              <td>
+                                {r.started ? (
+                                  <span className="row" style={{ gap: 5 }}>
+                                    {r.services?.map((s) => <Dot key={s.id} s={s} />)}
+                                  </span>
+                                ) : (
+                                  <span className="chip err" style={{ padding: '1px 8px', fontSize: 11 }}>
+                                    не запустилась
+                                  </span>
+                                )}
+                              </td>
+                              <td className="tnum dim" style={{ textAlign: 'right', width: 90 }}>
+                                {r.started ? `${okCount(r)} из ${r.services?.length ?? 0}` : '—'}
+                              </td>
+                            </tr>
+                            {expanded === r.strategy && r.services && (
+                              <tr>
+                                <td colSpan={3} style={{ background: 'var(--panel)' }}>
+                                  <div className="col" style={{ gap: 6, padding: '4px 0' }}>
+                                    {r.services.map((s) => (
+                                      <div key={s.id} className="row wrap" style={{ gap: 6, fontSize: 12 }}>
+                                        <span style={{ width: 200 }}>{serviceName(s.id)}</span>
+                                        {s.checks.map((c) => (
+                                          <span key={c.target} className={`chip ${c.ok ? 'ok' : 'err'}`} title={c.ok ? sec(c.ms) : c.error} style={{ padding: '1px 7px', fontSize: 10.5 }}>
+                                            {c.target.split('/')[0]}
+                                          </span>
+                                        ))}
+                                      </div>
                                     ))}
-                                    {t.ping !== undefined && (
-                                      <span className="dim tnum" style={{ fontSize: 11.5 }}>
-                                        {t.ping === 'Timeout' ? 'нет пинга' : t.ping.replace('ms', 'мс')}
-                                      </span>
-                                    )}
                                   </div>
-                                ))}
-                                {!r.targets.length && <span className="dim" style={{ fontSize: 12 }}>winws.exe не поднялся с этой стратегией</span>}
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            {!running && rows.length > 0 && (
-              <p className="dim" style={{ fontSize: 12 }}>
-                Нажмите на строку, чтобы увидеть проверки по каждому сайту. Отчёт в формате утилиты сборки сохранён в папку отчётов.
-              </p>
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
             )}
           </>
-        )
-      )}
+        ) : (
+          <>
+            <b style={{ fontSize: 13.5 }}>{test.best ? `Лучшая стратегия — ${strategyLabel(test.best)}` : 'Ни одна стратегия не прошла проверки'}</b>
+            {rows.length > 0 && <DpiTable rows={rows} best={test.best} expanded={expanded} setExpanded={setExpanded} />}
+          </>
+        )}
+      </>
+    )
+    footer = (
+      <>
+        <button
+          className="btn icon ghost"
+          title="Скопировать отчёт"
+          disabled={!test.file}
+          onClick={async () => {
+            await window.prism.system.clipboardWrite(await window.prism.zapret.report())
+            toast('ok', 'Отчёт скопирован — им можно поделиться')
+          }}
+        >
+          <Copy size={15} />
+        </button>
+        <button className="btn icon ghost" title="Папка с отчётами" onClick={() => window.prism.zapret.openReports()}>
+          <FolderOpen size={15} />
+        </button>
+        <button className="btn ghost" style={{ marginRight: 'auto' }} onClick={() => setSetup(true)}>
+          <Settings2 size={15} />
+          Настроить…
+        </button>
+        <button className="btn" disabled={busy} onClick={() => run()}>
+          <RefreshCw size={15} />
+          Проверить снова
+        </button>
+        {test.best && (
+          <button className="btn primary" disabled={busy} onClick={() => useBest(test.best!)}>
+            <Zap size={15} />
+            Включить с {strategyLabel(test.best)}
+          </button>
+        )}
+      </>
+    )
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} wide title="Проверка доступности" icon={<Gauge size={18} className="mut" />} footer={footer}>
+      {body}
     </Modal>
+  )
+}
+
+/** Сервисы: как было без обхода и как стало со стратегией */
+function ServiceTable({
+  baseline,
+  withLabel,
+  withServices,
+  compact
+}: {
+  baseline: ZapretServiceResult[]
+  withLabel: string
+  withServices?: ZapretServiceResult[]
+  compact?: boolean
+}): JSX.Element {
+  return (
+    <div className="card" style={{ overflow: 'hidden' }}>
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Сервис</th>
+            <th>Без обхода</th>
+            <th>{withLabel}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {baseline.map((b) => {
+            const Icon = SERVICE_ICON[b.id] ?? Cloud
+            return (
+              <tr key={b.id}>
+                <td>
+                  <span className="row" style={{ gap: 9 }}>
+                    <Icon size={15} className="dim" />
+                    {serviceName(b.id)}
+                  </span>
+                </td>
+                <td>
+                  <StatusChip s={b} compact />
+                </td>
+                <td>
+                  <StatusChip s={withServices?.find((s) => s.id === b.id)} compact={compact} />
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/** Результаты DPI-чекеров — для опытных, как в утилите сборки */
+function DpiTable({
+  rows,
+  best,
+  expanded,
+  setExpanded
+}: {
+  rows: ZapretStrategyResult[]
+  best?: string
+  expanded: string | null
+  setExpanded: (v: string | null) => void
+}): JSX.Element {
+  return (
+    <div className="card" style={{ overflow: 'hidden' }}>
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Стратегия</th>
+            <th style={{ textAlign: 'right' }}>Успешно</th>
+            <th style={{ textAlign: 'right' }}>Ошибки</th>
+            <th style={{ textAlign: 'right' }}>Заморозка</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <Fragment key={r.strategy}>
+              <tr className={`zap-row${r.strategy === best ? ' best' : ''}`} onClick={() => setExpanded(expanded === r.strategy ? null : r.strategy)}>
+                <td>
+                  <b style={{ fontWeight: 560 }}>{strategyLabel(r.strategy)}</b>
+                  {!r.started && (
+                    <span className="chip err" style={{ marginLeft: 8, padding: '1px 8px', fontSize: 11 }}>
+                      не запустилась
+                    </span>
+                  )}
+                </td>
+                <td className="tnum" style={{ textAlign: 'right', color: r.ok ? 'var(--ok)' : undefined }}>
+                  {r.ok}
+                </td>
+                <td className="tnum" style={{ textAlign: 'right', color: r.error ? 'var(--err)' : undefined }}>
+                  {r.error}
+                </td>
+                <td className="tnum" style={{ textAlign: 'right' }}>
+                  {r.started ? r.blocked : '—'}
+                </td>
+              </tr>
+              {expanded === r.strategy && (
+                <tr>
+                  <td colSpan={4} style={{ background: 'var(--panel)' }}>
+                    <div className="col" style={{ gap: 6, padding: '4px 0' }}>
+                      {r.targets.map((t) => (
+                        <div key={t.name} className="row wrap" style={{ gap: 6 }}>
+                          <span className="ell" style={{ width: 210, fontSize: 12 }} title={t.name}>
+                            {t.name}
+                          </span>
+                          {t.checks.map((c) => (
+                            <span key={c.label} className={`chip ${CHECK_CLS[c.status]}`} title={c.detail} style={{ padding: '1px 7px', fontSize: 10.5 }}>
+                              {c.label}
+                            </span>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 

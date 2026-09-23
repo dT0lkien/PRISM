@@ -37,6 +37,7 @@ import type {
   ZapretConfig,
   ZapretIpsetMode,
   ZapretPack,
+  ZapretServiceResult,
   ZapretState,
   ZapretStrategyResult,
   ZapretTargetResult,
@@ -45,7 +46,7 @@ import type {
   ZapretTestSummary
 } from '@shared/types'
 import {
-  DEFAULT_TARGETS,
+  CONTROL_URL,
   DOMAIN_PLACEHOLDER,
   EXTRA_DOMAINS,
   IPSET_PLACEHOLDER,
@@ -55,13 +56,16 @@ import {
   compareStrategies,
   compareVersions,
   expandStrategy,
+  TEST_SERVICES,
+  checkLabel,
   formatReport,
+  formatServicesReport,
   ipsetContent,
   listLines,
   packVersionFrom,
   parseStrategy,
-  parseTargets,
   pickBest,
+  serviceStatus,
   strategyLabel,
   summarizeStrategy,
   toCommandLine
@@ -69,7 +73,7 @@ import {
 import { store } from './store'
 import { IS_WIN, PS_UTF8, isElevated, psUtf8 } from './win'
 import { unzip } from './unzip'
-import { CHECKS, dpiCheck, fetchBuffer, httpCheck, ping, pool } from './zapret-net'
+import { CHECKS, dpiCheck, fetchBuffer, loadCheck, pool, tcpCheck } from './zapret-net'
 import { downloadIpset, enableTcpTimestamps } from './zapret-tools'
 
 const exec = promisify(execFile)
@@ -781,6 +785,23 @@ export class Zapret extends EventEmitter {
     }
   }
 
+  /**
+   * Включить обход с текущими настройками — для «Применить» после теста:
+   * работает — перезапускаем, стоит своя служба — переставляем, иначе запускаем.
+   */
+  async enable(): Promise<StartResult> {
+    if (this.applyTimer) {
+      clearTimeout(this.applyTimer)
+      this.applyTimer = null
+    }
+    if (this.proc) return this.restart()
+    if (this.state.service.installed && !this.state.service.foreign) {
+      await this.installService()
+      return { ok: true }
+    }
+    return this.start()
+  }
+
   /* ─── установка и обновление сборки ─── */
 
   private inUse(dir: string): boolean {
@@ -957,24 +978,55 @@ export class Zapret extends EventEmitter {
     if (this.test) this.emit('test', { ...this.test, results: [...this.test.results] })
   }
 
-  async startTests(kind: ZapretTestKind, ids: string[], vpnTunRunning: boolean): Promise<void> {
+  /**
+   * Тест в одно нажатие. Всё, что мешает честному замеру, Prism убирает сам
+   * и возвращает после: работающий обход, службу zapret, VPN в режиме TUN
+   * (его останавливает и поднимает вызывающий — ядро живёт не здесь).
+   * Отказывает только там, где без человека нельзя: нет прав, чужой winws.
+   */
+  async startTests(kind: ZapretTestKind, ids: string[], resumeVpn?: () => Promise<unknown>): Promise<void> {
     if (this.test?.running) throw new Error('Тест уже идёт')
     const pack = await this.guard()
-    if (vpnTunRunning) throw new Error('Отключите VPN на время теста: в режиме TUN проверялся бы туннель, а не стратегия')
     await this.refresh()
-    if (/running|start pending/i.test(this.state.service.state ?? '')) {
-      throw new Error('Работает служба zapret — удалите её на время теста: стратегии запускаются по очереди')
-    }
     if (this.state.foreignWinws) throw new Error('Запущен сторонний winws.exe — остановите его, иначе результаты будут неверны')
-    const list = [...new Set(ids)].filter((id) => pack.templates.has(id)).sort(compareStrategies)
+    const wanted = new Set(ids)
+    const list = [...pack.templates.keys()].filter((id) => !wanted.size || wanted.has(id)).sort(compareStrategies)
     if (!list.length) throw new Error('Не выбрано ни одной стратегии')
 
+    const paused: NonNullable<ZapretTestProgress['paused']> = []
+    if (resumeVpn) paused.push('vpn')
     const resume = this.proc ? this.state.running : undefined
+    if (resume) paused.push('zapret')
     await this.stop(true)
+    if (/running|start pending/i.test(this.state.service.state ?? '')) {
+      await this.setService(false)
+      paused.push('service')
+    }
+
     this.testCancel = false
-    this.test = { running: true, kind, total: list.length, done: 0, results: [] }
+    this.test = {
+      running: true,
+      kind,
+      phase: kind === 'standard' ? 'baseline' : 'strategies',
+      startedAt: Date.now(),
+      paused,
+      total: list.length,
+      done: 0,
+      results: []
+    }
     this.emitTest()
-    void this.testLoop(pack, kind, list, resume)
+    void this.testLoop(pack, kind, list, { zapret: resume, service: paused.includes('service'), vpn: resumeVpn })
+  }
+
+  /** Остановить или запустить службу zapret — на время теста */
+  private async setService(run: boolean): Promise<void> {
+    await psUtf8(
+      run
+        ? `$ErrorActionPreference = 'SilentlyContinue'; Start-Service -Name zapret`
+        : `$ErrorActionPreference = 'SilentlyContinue'; Stop-Service -Name zapret -Force`,
+      60000
+    )
+    await this.refresh()
   }
 
   cancelTests(): void {
@@ -984,15 +1036,27 @@ export class Zapret extends EventEmitter {
     if (p) void this.killProc(p)
   }
 
-  private async testLoop(pack: Pack, kind: ZapretTestKind, list: string[], resume?: string): Promise<void> {
+  private async testLoop(
+    pack: Pack,
+    kind: ZapretTestKind,
+    list: string[],
+    restore: { zapret?: string; service: boolean; vpn?: () => Promise<unknown> }
+  ): Promise<void> {
     const t = this.test!
     const cfg = store.get().zapret
     try {
       await ensureRoot()
       await enableTcpTimestamps()
 
-      const targetsFile = join(pack.dir, 'utils', 'targets.txt')
-      const targets = kind === 'standard' ? (existsSync(targetsFile) && parseTargets(read(targetsFile)).length ? parseTargets(read(targetsFile)) : DEFAULT_TARGETS) : []
+      if (kind === 'standard') {
+        // Сначала — что открывается без обхода. Не открылся даже ya.ru — дальше мерить нечего
+        const control = await loadCheck(CONTROL_URL)
+        if (!control.ok) throw new Error(`Нет интернета: не открывается даже ya.ru (${control.error}). Проверьте подключение и запустите тест снова`)
+        t.baseline = await this.serviceChecks()
+        t.phase = 'strategies'
+        this.emitTest()
+      }
+
       const suite = kind === 'dpi' ? await this.dpiSuite() : []
       // DPI-проверка честна только когда под фильтр попадает любой адрес — как в утилите сборки
       this.materialize(zapretPaths.test, pack, cfg, kind === 'dpi' ? 'any' : cfg.ipsetMode)
@@ -1007,15 +1071,22 @@ export class Zapret extends EventEmitter {
         this.testProc = p
         if (await this.waitAlive(p, 1200)) {
           r.started = true
-          r.targets = kind === 'standard' ? await this.standardChecks(targets) : await this.dpiChecks(suite)
-          for (const tr of r.targets) {
-            for (const c of tr.checks) {
-              if (c.status === 'ok') r.ok++
-              else if (c.status === 'unsup') r.unsup++
-              else if (c.status === 'blocked') r.blocked++
-              else r.error++
+          if (kind === 'standard') {
+            r.services = await this.serviceChecks()
+            for (const sv of r.services) {
+              r.ok += sv.ok
+              r.error += sv.total - sv.ok
             }
-            if (tr.ping !== undefined) tr.ping === 'Timeout' ? r.pingFail++ : r.pingOk++
+          } else {
+            r.targets = await this.dpiChecks(suite)
+            for (const tr of r.targets) {
+              for (const c of tr.checks) {
+                if (c.status === 'ok') r.ok++
+                else if (c.status === 'unsup') r.unsup++
+                else if (c.status === 'blocked') r.blocked++
+                else r.error++
+              }
+            }
           }
         }
         await this.killProc(p)
@@ -1023,6 +1094,7 @@ export class Zapret extends EventEmitter {
         if (this.testCancel && r.started) break
         t.results.push(r)
         t.done++
+        t.best = pickBest(t.results)
         this.emitTest()
       }
 
@@ -1033,10 +1105,15 @@ export class Zapret extends EventEmitter {
         const p2 = (n: number): string => String(n).padStart(2, '0')
         const stamp = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}_${p2(d.getHours())}-${p2(d.getMinutes())}-${p2(d.getSeconds())}`
         t.file = join(zapretPaths.reports, `test_results_${stamp}.txt`)
-        writeFileSync(t.file, formatReport(kind, t.results, t.best), 'utf8')
+        const report = kind === 'standard' ? formatServicesReport(t.baseline, t.results, t.best) : formatReport(kind, t.results, t.best)
+        writeFileSync(t.file, report, 'utf8')
 
         const summary: ZapretTestSummary = { kind, at: Date.now(), best: t.best, scores: {} }
-        for (const r of t.results) summary.scores[r.strategy] = { ok: r.ok, total: r.ok + r.error + r.unsup + r.blocked }
+        for (const r of t.results) {
+          summary.scores[r.strategy] = r.services
+            ? { ok: r.services.filter((sv) => sv.status === 'ok').length, total: r.services.length }
+            : { ok: r.ok, total: r.ok + r.error + r.unsup + r.blocked }
+        }
         store.patch({ zapretLastTest: summary })
       }
     } catch (e) {
@@ -1044,25 +1121,40 @@ export class Zapret extends EventEmitter {
     } finally {
       if (this.testProc) await this.killProc(this.testProc)
       this.testProc = null
-      t.running = false
       t.current = undefined
+      /* Возвращаем всё, что остановили, и только потом объявляем тест
+         законченным: иначе «Применить» можно нажать посреди восстановления */
+      if (restore.service || restore.zapret || restore.vpn) {
+        t.phase = 'restore'
+        this.emitTest()
+      }
+      if (restore.service) await this.setService(true).catch((e) => this.log(`Служба zapret не запустилась после теста: ${errText(e)}`, 'error'))
+      if (restore.zapret && !this.proc) await this.start(restore.zapret)
+      if (restore.vpn) await restore.vpn().catch((e) => this.log(`VPN не поднялся после теста: ${errText(e)}`, 'error'))
+      t.running = false
       t.finishedAt = Date.now()
       this.emitTest()
       this.emitState()
-      if (resume && !this.proc) await this.start(resume)
     }
   }
 
-  private async standardChecks(targets: { name: string; url?: string; ping: string }[]): Promise<ZapretTargetResult[]> {
-    return pool(targets, 12, async (tg) => {
-      const checks: ZapretTargetResult['checks'] = []
-      if (tg.url) {
-        for (const c of CHECKS) {
-          const r = await httpCheck(tg.url, c.pin, 4000)
-          checks.push({ label: c.label, status: r.status, detail: r.detail })
-        }
+  /** Все сервисы из TEST_SERVICES разом: проверки параллельно, итог — по сервисам */
+  private async serviceChecks(): Promise<ZapretServiceResult[]> {
+    const jobs = TEST_SERVICES.flatMap((sv) => sv.checks.map((c) => ({ sv, c })))
+    const res = await pool(jobs, 16, ({ c }) => (c.kind === 'tcp' ? tcpCheck(c.host, c.port) : loadCheck(c.url)))
+    return TEST_SERVICES.map((sv) => {
+      const mine = jobs.map((j, i) => ({ j, r: res[i] })).filter((x) => x.j.sv === sv)
+      const checks = mine.map(({ j, r }) => ({ target: checkLabel(j.c), ok: r.ok, ms: r.ok ? r.ms : undefined, error: r.error }))
+      const good = checks.filter((c) => c.ok)
+      return {
+        id: sv.id,
+        status: serviceStatus(good.length, checks.length, sv.any),
+        ok: good.length,
+        total: checks.length,
+        ms: good.length ? Math.round(good.reduce((a, c) => a + (c.ms ?? 0), 0) / good.length) : undefined,
+        error: checks.find((c) => !c.ok)?.error,
+        checks
       }
-      return { name: tg.name, checks, ping: await ping(tg.ping) }
     })
   }
 
