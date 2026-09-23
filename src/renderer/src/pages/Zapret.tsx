@@ -177,7 +177,7 @@ function InstallCard(): JSX.Element {
         {[
           { icon: <Shuffle size={16} />, t: 'Два десятка стратегий', d: 'Разные способы обмануть DPI. Какая сработает — зависит от провайдера, поэтому их много.' },
           { icon: <HardDrive size={16} />, t: 'Служба Windows', d: 'Обход стартует вместе с системой и работает, даже когда Prism закрыт.' },
-          { icon: <Gauge size={16} />, t: 'Тест стратегий', d: 'Prism сам переберёт стратегии на Discord, YouTube и Cloudflare и подскажет лучшую.' },
+          { icon: <Gauge size={16} />, t: 'Тест в одну кнопку', d: 'Prism сам переберёт стратегии на YouTube, Discord, Telegram и Spotify и включит лучшую.' },
           { icon: <Stethoscope size={16} />, t: 'Диагностика', d: 'Находит конфликтующие программы, VPN и выключенные службы, мешающие обходу.' }
         ].map((f) => (
           <div key={f.t} className="preset" style={{ cursor: 'default' }}>
@@ -276,12 +276,12 @@ function Installed(): JSX.Element {
         <span>Стратегия</span>
         <button className="btn sm" style={{ marginLeft: 'auto' }} onClick={() => setModal('test')}>
           <Gauge size={14} />
-          Подобрать тестом
+          Найти рабочую
         </button>
       </div>
       <p className="mut zap-lead">
-        Стратегии по-разному обманывают DPI провайдера, и со временем провайдер учится их замечать. Если что-то перестало
-        открываться — попробуйте другую или запустите тест.
+        Стратегии по-разному обманывают DPI провайдера, и со временем провайдер учится их замечать. Не знаете, какую выбрать, или
+        что-то перестало открываться — нажмите «Найти рабочую»: Prism проверит все сам.
       </p>
       <div className="preset-grid zap-grid">
         {pack.strategies.map((s) => {
@@ -302,7 +302,7 @@ function Installed(): JSX.Element {
                 {best ? (
                   <span className="chip ok">лучшая</span>
                 ) : score ? (
-                  <span className="chip tnum" title="Проверок пройдено в последнем тесте">
+                  <span className="chip tnum" title="Сколько сервисов открылось в последнем тесте">
                     {score.ok}/{score.total}
                   </span>
                 ) : null}
@@ -399,8 +399,8 @@ function Installed(): JSX.Element {
         <Tool icon={<Stethoscope size={16} />} title="Диагностика" onClick={() => setModal('diag')}>
           Ищет частые причины, по которым обход не работает: конфликтующие программы, VPN, выключенные службы, DNS.
         </Tool>
-        <Tool icon={<Gauge size={16} />} title="Тест стратегий" onClick={() => setModal('test')}>
-          Перебирает стратегии на Discord, YouTube, Google и Cloudflare и подсказывает лучшую для вашего провайдера.
+        <Tool icon={<Gauge size={16} />} title="Тест доступности" onClick={() => setModal('test')}>
+          Одна кнопка: Prism переберёт все стратегии на YouTube, Discord, Telegram, Spotify и сайтах за Cloudflare и включит лучшую.
         </Tool>
         <Tool icon={<FileText size={16} />} title="Файл hosts" onClick={() => setModal('hosts')}>
           Чинит веб-версию Telegram и бесконечное «Подключение» к голосовому чату Discord.

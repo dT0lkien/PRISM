@@ -641,14 +641,35 @@ export function registerIpc(): void {
   h('zapret:hosts', () => safe(async () => ({ info: await hostsInfo() })))
   h('zapret:hostsApply', () => safe(async () => ({ info: await hostsApply() })))
   h('zapret:hostsRemove', () => safe(async () => ({ info: await hostsRemove() })))
+  /* VPN в режиме TUN забрал бы тестовый трафик в туннель — проверялся бы
+     сервер, а не стратегия. Не отказываем, а ставим туннель на паузу и
+     поднимаем после теста: человек нажал «Тест», думать за него — наша работа.
+     Системный прокси не мешает: Node его не использует. */
   h('zapret:testStart', (kind: ZapretTestKind, ids: string[]) =>
     safe(async () => {
       const c = core.getState()
-      await zapret.startTests(
-        kind === 'dpi' ? 'dpi' : 'standard',
-        Array.isArray(ids) ? ids.filter(isStr) : [],
-        c.status === 'running' && c.captureMode === 'tun'
-      )
+      const tun = c.status === 'running' && c.captureMode === 'tun'
+      if (tun) await core.stop()
+      try {
+        await zapret.startTests(
+          kind === 'dpi' ? 'dpi' : 'standard',
+          Array.isArray(ids) ? ids.filter(isStr) : [],
+          tun ? () => core.start() : undefined
+        )
+      } catch (e) {
+        if (tun) await core.start()
+        throw e
+      }
+      return {}
+    })
+  )
+  h('zapret:useStrategy', (id: string) =>
+    safe(async () => {
+      if (!isStr(id) || !zapret.getState().pack?.strategies.some((x) => x.id === id)) throw new Error('В сборке нет такой стратегии')
+      store.patch({ zapret: { ...store.get().zapret, strategy: id } })
+      pushSnapshot()
+      const r = await zapret.enable()
+      if (!r.ok) throw new Error(r.error ?? 'Обход не включился')
       return {}
     })
   )

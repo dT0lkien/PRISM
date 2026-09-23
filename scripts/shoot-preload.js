@@ -206,7 +206,7 @@ const STRATEGIES = [
   ['general (SIMPLE FAKE ALT2)', 'fake · ts']
 ].map(([id, summary]) => ({ id, label: id.match(/\((.+)\)/)?.[1] ?? id, summary }))
 
-const scores = Object.fromEntries(STRATEGIES.map((s, i) => [s.id, { ok: [30, 21, 29, 12, 24, 36, 27, 33, 9, 18][i % 10], total: 36 }]))
+const scores = Object.fromEntries(STRATEGIES.map((s, i) => [s.id, { ok: [5, 3, 4, 2, 4, 5, 3, 5, 1, 2][i % 10], total: 6 }]))
 
 const zapretState = {
   supported: process.env.PRISM_ZAPRET !== 'mac',
@@ -229,26 +229,35 @@ const zapretState = {
   windivert: 'Running',
   foreignWinws: 0,
   update: { latest: '1.10.2', checkedAt: Date.now() - 1_200_000 },
-  lastTest: { kind: 'standard', at: Date.now() - 3600_000, best: 'general (ALT5)', scores }
+  lastTest: { kind: 'standard', at: Date.now() - 3600_000, best: 'general (ALT)', scores }
 }
 
+/* Итог проверки доступности — как на живом ПК: YouTube и Discord режут, приложение Telegram закрыто по IP */
+const svc = (id, ok, total, ms = 320, error = 'таймаут') => ({
+  id, ok, total, ms: ok ? ms : undefined,
+  status: ok === 0 ? 'fail' : ok === total || id === 'telegram-app' ? 'ok' : 'partial',
+  error: ok < total ? error : undefined,
+  checks: Array.from({ length: total }, (_, i) => ({ target: `${id}.example/${i}`, ok: i < ok, ms: i < ok ? ms : undefined, error: i < ok ? undefined : error }))
+})
+const baseline = [svc('youtube', 1, 3), svc('discord', 0, 3), svc('telegram-web', 1, 3), svc('telegram-app', 0, 3, 0, 'нет соединения'), svc('spotify', 1, 2, 300, 'сброс соединения'), svc('cloudflare', 2, 2)]
+const strat = (id, list, started = true) => ({ strategy: id, started, ok: 0, error: 0, unsup: 0, blocked: 0, pingOk: 0, pingFail: 0, targets: [], services: started ? list : undefined })
 const zapretTest = {
-  running: false,
+  running: process.env.PRISM_TEST_RUNNING === '1',
   kind: 'standard',
-  total: 6,
-  done: 6,
-  best: 'general (ALT5)',
-  results: STRATEGIES.slice(0, 6).map((s, i) => ({
-    strategy: s.id,
-    started: i !== 3,
-    ok: i === 3 ? 0 : scores[s.id].ok,
-    error: i === 3 ? 0 : 36 - scores[s.id].ok,
-    unsup: 0,
-    blocked: 0,
-    pingOk: i === 3 ? 0 : 4,
-    pingFail: 0,
-    targets: []
-  })),
+  phase: 'strategies',
+  startedAt: Date.now() - 64_000,
+  paused: process.env.PRISM_TEST_RUNNING === '1' ? ['vpn'] : [],
+  baseline,
+  total: 22,
+  done: process.env.PRISM_TEST_RUNNING === '1' ? 7 : 22,
+  current: 'general (ALT7)',
+  best: 'general (ALT)',
+  results: [
+    strat('general (ALT)', [svc('youtube', 3, 3, 410), svc('discord', 3, 3, 280), svc('telegram-web', 3, 3, 190), svc('telegram-app', 0, 3, 0, 'нет соединения'), svc('spotify', 2, 2, 230), svc('cloudflare', 2, 2, 350)]),
+    strat('general (ALT9)', [svc('youtube', 3, 3, 520), svc('discord', 3, 3), svc('telegram-web', 2, 3), svc('telegram-app', 0, 3, 0, 'нет соединения'), svc('spotify', 2, 2), svc('cloudflare', 2, 2)]),
+    strat('general', [svc('youtube', 2, 3, 600, 'застряло на 16 КБ'), svc('discord', 1, 3), svc('telegram-web', 1, 3), svc('telegram-app', 0, 3, 0, 'нет соединения'), svc('spotify', 1, 2), svc('cloudflare', 2, 2)]),
+    strat('general (ALT5)', [], false)
+  ],
   file: 'C:\\test_results.txt',
   finishedAt: Date.now()
 }

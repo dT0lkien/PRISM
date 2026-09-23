@@ -1,13 +1,14 @@
 /* Сетевые проверки для теста стратегий zapret.
 
-   Утилита сборки гоняет curl.exe; здесь то же самое на node:https, чтобы не
-   зависеть от наличия curl и не плодить процессы на каждую проверку. Трафик
-   Electron перехватывает WinDivert так же, как любой другой программы, так
-   что проверка честная. Смысл статусов повторяет «test zapret.ps1». */
+   Проверка доступности меряет не рукопожатие, а настоящую загрузку: провайдеры
+   любят пропускать TLS и «замораживать» соединение после первых 16–20 КБ, и
+   HEAD-запрос такой сайт посчитал бы рабочим. Трафик Electron перехватывает
+   WinDivert так же, как любой другой программы, так что проверка честная.
+   DPI-чекеры повторяют «test zapret.ps1» сборки. */
 
 import http from 'node:http'
 import https from 'node:https'
-import { execFile } from 'node:child_process'
+import { connect } from 'node:net'
 import { randomBytes } from 'node:crypto'
 import type { ZapretCheckStatus } from '@shared/types'
 
@@ -45,26 +46,82 @@ function connectTimeout(req: http.ClientRequest, ms: number, onTimeout: () => vo
   })
 }
 
-/** HEAD-запрос, как `curl -I`: любой полученный ответ, даже 404, — успех */
-export function httpCheck(url: string, pin: TlsPin, timeoutMs = 4000): Promise<{ status: ZapretCheckStatus; detail?: string }> {
+/** Ошибка сети — словами, которые что-то говорят человеку */
+function reason(e: NodeJS.ErrnoException): string {
+  const code = String(e?.code ?? '')
+  if (/ECONNRESET|EPIPE/.test(code)) return 'сброс соединения'
+  if (/ECONNREFUSED/.test(code)) return 'соединение отклонено'
+  if (/ENOTFOUND|EAI_AGAIN/.test(code)) return 'адрес не найден'
+  if (/ETIMEDOUT/.test(code)) return 'таймаут'
+  if (/CERT|SELF_SIGNED|UNABLE_TO_VERIFY|UNABLE_TO_GET_ISSUER|ALTNAME|DEPTH_ZERO/.test(code)) return 'подменённый сертификат'
+  return code || String(e?.message ?? 'ошибка')
+}
+
+export interface LoadResult {
+  ok: boolean
+  ms: number
+  error?: string
+}
+
+/**
+ * Открывает страницу по-настоящему: читает ответ, пока не придёт minBytes
+ * или он не кончится. Код ответа не важен — 404 от сервера тоже значит, что
+ * до него дошли. Не важен и объём, если страница маленькая и дочиталась.
+ */
+export function loadCheck(url: string, timeoutMs = 6000, minBytes = 40 * 1024): Promise<LoadResult> {
   return new Promise((resolve) => {
+    const t0 = Date.now()
+    let got = 0
     let done = false
     const mod = url.startsWith('https:') ? https : http
-    const req = mod.request(url, { method: 'HEAD', agent: false, headers: { 'user-agent': 'curl/8.9.1' }, ...tlsOptions(pin) }, (res) => {
-      res.resume()
-      finish('ok', String(res.statusCode))
-    })
-    const timer = setTimeout(() => finish('error', 'таймаут'), timeoutMs)
-    function finish(status: ZapretCheckStatus, detail?: string): void {
+    const req = mod.get(
+      url,
+      {
+        agent: false,
+        headers: {
+          'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36',
+          accept: '*/*',
+          'accept-encoding': 'identity'
+        }
+      },
+      (res) => {
+        res.on('data', (c: Buffer) => {
+          got += c.length
+          if (got >= minBytes) finish(true)
+        })
+        res.on('end', () => finish(true))
+        res.on('error', (e) => finish(false, reason(e)))
+      }
+    )
+    const timer = setTimeout(
+      () => finish(false, got > 0 ? `застряло на ${Math.round(got / 1024)} КБ` : 'таймаут'),
+      timeoutMs
+    )
+    function finish(ok: boolean, error?: string): void {
       if (done) return
       done = true
       clearTimeout(timer)
       req.destroy()
-      resolve({ status, detail })
+      resolve({ ok, ms: Date.now() - t0, error: ok ? undefined : error })
     }
-    connectTimeout(req, Math.min(2000, timeoutMs), () => finish('error', 'нет соединения'))
-    req.on('error', (e: NodeJS.ErrnoException) => finish(classify(e), e.code))
-    req.end()
+    connectTimeout(req, Math.min(3000, timeoutMs), () => finish(false, 'нет соединения'))
+    req.on('error', (e: NodeJS.ErrnoException) => finish(false, reason(e)))
+  })
+}
+
+/** Установится ли TCP-соединение — так проверяется приложение Telegram */
+export function tcpCheck(host: string, port: number, timeoutMs = 3000): Promise<LoadResult> {
+  return new Promise((resolve) => {
+    const t0 = Date.now()
+    const sock = connect({ host, port })
+    const finish = (ok: boolean, error?: string): void => {
+      clearTimeout(timer)
+      sock.destroy()
+      resolve({ ok, ms: Date.now() - t0, error })
+    }
+    const timer = setTimeout(() => finish(false, 'нет соединения'), timeoutMs)
+    sock.once('connect', () => finish(true))
+    sock.once('error', (e: NodeJS.ErrnoException) => finish(false, reason(e)))
   })
 }
 
@@ -143,20 +200,6 @@ export function dpiCheck(host: string, pin: TlsPin, timeoutS = 5, rangeBytes = 6
       })
     }
     write(0)
-  })
-}
-
-/** Один ICMP-пинг системной утилитой: «12 ms» или «Timeout» — как в отчёте сборки */
-export function ping(host: string): Promise<string> {
-  return new Promise((resolve) => {
-    if (!/^[\w.:\-]+$/.test(host) || host.startsWith('-')) return resolve('Timeout')
-    const args = process.platform === 'win32' ? ['-n', '1', '-w', '1000', host] : ['-c', '1', '-t', '2', host]
-    /* Вывод ping локализован и идёт в OEM-кодировке, поэтому ищем не слово
-       «время», а число прямо перед TTL= — TTL не переводится. */
-    execFile('ping', args, { windowsHide: true, timeout: 5000, encoding: 'latin1' }, (_e, stdout) => {
-      const m = String(stdout).match(/[=<]\s*([\d.]+)[^=<\d\r\n]*ttl=/i) ?? String(stdout).match(/time[=<]([\d.]+)/i)
-      resolve(m ? `${Math.round(parseFloat(m[1]))} ms` : 'Timeout')
-    })
   })
 }
 
