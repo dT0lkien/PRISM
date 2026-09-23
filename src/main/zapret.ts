@@ -216,8 +216,13 @@ try {
   $expected = Join-Path ([IO.Path]::GetPathRoot([Environment]::SystemDirectory)) 'ProgramData\Prism'
   if ($p -ne $expected) { throw ('ожидался ' + $expected + ', а переменная ProgramData ведёт в ' + $p) }
   $trusted = @('S-1-5-32-544', 'S-1-5-18')
+  # Через .NET, а не Get-Acl: командлетам нужен модуль, а его автозагрузка
+  # ломается, когда powershell.exe запущен из-под PowerShell 7
   function Owner {
-    try { (Get-Acl -LiteralPath $p).GetOwner([Security.Principal.SecurityIdentifier]).Value } catch { '' }
+    try {
+      $sections = [Security.AccessControl.AccessControlSections]::Owner
+      [IO.Directory]::GetAccessControl($p, $sections).GetOwner([Security.Principal.SecurityIdentifier]).Value
+    } catch { 'не прочитать: ' + $_.Exception.Message }
   }
   if (Test-Path -LiteralPath $p) {
     $link = (Get-Item -LiteralPath $p -Force).Attributes -band [IO.FileAttributes]::ReparsePoint

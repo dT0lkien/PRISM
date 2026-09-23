@@ -44,11 +44,21 @@ export const DEFAULT_BYPASS = [
   '<local>'
 ].join(';')
 
+/* PowerShell 7 дописывает свои модули в PSModulePath, и powershell.exe 5.1,
+   запущенный из-под него — из терминала pwsh или шагом CI GitHub, — пытается
+   грузить их вместо своих: Get-Acl, Get-CimInstance и прочие просто пропадают.
+   Без этой переменной 5.1 соберёт путь к своим модулям сам. */
+function psEnv(extra?: Record<string, string>): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, ...extra }
+  for (const k of Object.keys(env)) if (k.toLowerCase() === 'psmodulepath') delete env[k]
+  return env
+}
+
 export async function ps(script: string, timeout = 20000): Promise<string> {
   const { stdout } = await exec(
     'powershell.exe',
     ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
-    { timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }
+    { timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024, env: psEnv() }
   )
   return stdout
 }
@@ -65,7 +75,7 @@ export async function psUtf8(script: string, timeout = 30000, env?: Record<strin
   const { stdout } = await exec(
     'powershell.exe',
     ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
-    { timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024, encoding: 'utf8', env: env ? { ...process.env, ...env } : undefined }
+    { timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024, encoding: 'utf8', env: psEnv(env) }
   )
   return stdout
 }
