@@ -432,4 +432,6 @@ export interface ZapretHostsInfo {
   managed: boolean
   /** Что добавится — для предпросмотра */
   entries: string[]
+  /** Записей для других доменов в списке сборки — Prism их не пишет */
+  skipped: number
 }

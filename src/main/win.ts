@@ -44,11 +44,21 @@ export const DEFAULT_BYPASS = [
   '<local>'
 ].join(';')
 
+/* PowerShell 7 дописывает свои модули в PSModulePath, и powershell.exe 5.1,
+   запущенный из-под него — из терминала pwsh или шагом CI GitHub, — пытается
+   грузить их вместо своих: Get-Acl, Get-CimInstance и прочие просто пропадают.
+   Без этой переменной 5.1 соберёт путь к своим модулям сам. */
+function psEnv(extra?: Record<string, string>): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, ...extra }
+  for (const k of Object.keys(env)) if (k.toLowerCase() === 'psmodulepath') delete env[k]
+  return env
+}
+
 export async function ps(script: string, timeout = 20000): Promise<string> {
   const { stdout } = await exec(
     'powershell.exe',
     ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
-    { timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }
+    { timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024, env: psEnv() }
   )
   return stdout
 }
@@ -65,7 +75,7 @@ export async function psUtf8(script: string, timeout = 30000, env?: Record<strin
   const { stdout } = await exec(
     'powershell.exe',
     ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
-    { timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024, encoding: 'utf8', env: env ? { ...process.env, ...env } : undefined }
+    { timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024, encoding: 'utf8', env: psEnv(env) }
   )
   return stdout
 }
@@ -206,26 +216,62 @@ export async function clearSystemProxy(restore?: ProxyState): Promise<void> {
 
 /* ─────────────────────────── автозапуск ─────────────────────────── */
 
+/* Задачу собираем через PowerShell, а не `schtasks /tr`. У schtasks путь и
+   аргументы едут одной строкой, и кавычки вокруг пути в 1.0–1.6 экранировались
+   «для cmd» — \" — хотя execFile экранирует их сам. Итог: в задаче оказывался
+   путь \"C:\…\Prism.exe\" с лишними слэшами, и автозапуск молча не работал.
+   Здесь путь и аргументы — отдельные поля, а в скрипт они приходят переменными
+   окружения, так что кавычить нечего.
+   Заодно — настройки, которые schtasks ставит по умолчанию и которые Prism
+   не подходят: не запускаться от батареи, гасить при переходе на батарею,
+   убивать через 72 часа работы и пониженный приоритет (его наследует ядро).
+   И триггер — вход именно этого пользователя, а не любого. */
+const TASK_SCRIPT = String.raw`
+$ErrorActionPreference = 'Stop'
+$result = 'OK'
+try {
+  $user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+  $action = New-ScheduledTaskAction -Execute ('"' + $env:PRISM_EXE + '"') -Argument $env:PRISM_ARGS
+  $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
+  $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest
+  $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -Priority 4
+  Register-ScheduledTask -TaskName $env:PRISM_TASK -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+} catch {
+  $result = 'ERR:' + $_.Exception.Message
+}
+${PS_UTF8}
+Write-Output $result
+`
+
+/* Что запускать при входе. Портативная сборка при каждом старте распаковывает
+   себя во временный каталог, и process.execPath ведёт туда — после выхода
+   этого файла уже нет. Настоящий exe она сообщает переменной окружения. */
+const launcher = (): string => process.env.PORTABLE_EXECUTABLE_FILE || process.execPath
+
 export async function setAutoStart(enabled: boolean, elevated: boolean, minimized: boolean): Promise<void> {
   if (!IS_WIN) {
     app.setLoginItemSettings({ openAtLogin: enabled })
     return
   }
   // Обычный автозапуск через реестр — снимаем всегда, чтобы не было двух записей
-  app.setLoginItemSettings({ openAtLogin: enabled && !elevated, args: minimized ? ['--minimized'] : [] })
+  app.setLoginItemSettings({ openAtLogin: enabled && !elevated, path: launcher(), args: minimized ? ['--minimized'] : [] })
 
   if (elevated && enabled) {
     // Задача планировщика с наивысшими правами: автозапуск без окна UAC
-    const exe = process.execPath
-    const tr = `\\"${exe}\\"${minimized ? ' --minimized' : ''} --elevated`
+    const args = [...(minimized ? ['--minimized'] : []), '--elevated'].join(' ')
+    let out: string
     try {
-      await exec(
-        'schtasks',
-        ['/create', '/tn', TASK_NAME, '/tr', tr, '/sc', 'onlogon', '/rl', 'highest', '/f'],
-        { timeout: 20000, windowsHide: true }
+      out = (await psUtf8(TASK_SCRIPT, 30000, { PRISM_EXE: launcher(), PRISM_ARGS: args, PRISM_TASK: TASK_NAME })).trim()
+    } catch {
+      out = 'ERR:'
+    }
+    if (out !== 'OK') {
+      const why = out.replace(/^ERR:/, '').trim()
+      throw new Error(
+        !why || /access|доступ/i.test(why)
+          ? 'Не удалось создать задачу автозапуска — нужны права администратора'
+          : `Не удалось создать задачу автозапуска: ${why}`
       )
-    } catch (e) {
-      throw new Error('Не удалось создать задачу автозапуска — нужны права администратора')
     }
   } else {
     try {

@@ -291,6 +291,34 @@ export function hostsEntries(text: string): string[] {
   return listLines(text).filter((l) => /^\S+\s+\S+/.test(l))
 }
 
+/**
+ * Для каких доменов Prism согласен править системный hosts — ровно то, что
+ * обещает окно: Telegram, Discord и GitHub. Список приезжает с main-ветки
+ * чужого репозитория, и без этой границы любой коммит туда увёл бы на свой
+ * адрес что угодно, от банка до сервера обновлений, — у всех сразу.
+ */
+export const HOSTS_ALLOWED_DOMAINS = [
+  'telegram.org',
+  'telegram.me',
+  'telegram.dog',
+  'telegram.space',
+  't.me',
+  'telesco.pe',
+  'tg.dev',
+  'discord.com',
+  'discord.gg',
+  'discord.media',
+  'discordapp.com',
+  'discordapp.net',
+  'github.com',
+  'githubusercontent.com'
+]
+
+export function hostsAllowed(entry: string): boolean {
+  const name = hostsName(entry)
+  return !!name && HOSTS_ALLOWED_DOMAINS.some((d) => name === d || name.endsWith(`.${d}`))
+}
+
 /** Делит hosts на «свой блок» и всё остальное */
 function splitHosts(current: string): { outside: string[]; block: string[] } {
   const lines = current.replace(/\r/g, '').split('\n')

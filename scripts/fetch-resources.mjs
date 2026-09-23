@@ -8,9 +8,25 @@
 import { inflateRawSync, gunzipSync } from 'node:zlib'
 import { existsSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs'
 import { join } from 'node:path'
+import { createHash } from 'node:crypto'
 
 const SING_BOX = '1.13.15'
 const WINTUN = '0.14.1'
+
+/* SHA-256 архивов. Ядро едет в каждый релиз и работает с правами
+   администратора (на macOS — root), поэтому скачанное сверяем с суммами,
+   которые проверили при смене версии, а не верим сети на слово. Суммы
+   sing-box — из поля digest ассетов GitHub, wintun — со страницы wintun.net;
+   2026-09-23 обе сверены со скачанными файлами. Новая версия ядра — новые
+   суммы здесь, иначе скрипт откажется работать. */
+const SHA256 = {
+  [`sing-box-${SING_BOX}-windows-amd64.zip`]: '599b296f6e57511d36d2a6f3011aed1a86fa98418578bbb06bd6dc241b5d8877',
+  [`sing-box-${SING_BOX}-darwin-arm64.tar.gz`]: '3452d866834c9572389e5ca73e60d4ee45a7d5b79332188c9a9e533c5fd40a6d',
+  [`sing-box-${SING_BOX}-darwin-amd64.tar.gz`]: '817e04f90f941b718fedd965ff05bfe72abfcc62952888b01751a6dec5547e14',
+  [`sing-box-${SING_BOX}-linux-amd64.tar.gz`]: 'a3a3ff223b23c3f4731d0a17cb0ef94c97ce257c70721a5b07dc7ca079203c9f',
+  [`sing-box-${SING_BOX}-linux-arm64.tar.gz`]: 'f0810bbb5722ae36635687c421019defcc8b328d31a0b3c287901f331747ca93',
+  [`wintun-${WINTUN}.zip`]: '07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51'
+}
 
 const ROOT = process.cwd()
 const force = process.argv.includes('--force')
@@ -75,6 +91,17 @@ async function get(url) {
   return Buffer.from(await res.arrayBuffer())
 }
 
+/** Скачать архив и сверить с закреплённой суммой */
+async function getPinned(url) {
+  const file = url.split('/').pop()
+  const want = SHA256[file]
+  if (!want) throw new Error(`для ${file} не закреплена SHA-256 — добавьте её в SHA256 в начале скрипта`)
+  const data = await get(url)
+  const got = createHash('sha256').update(data).digest('hex')
+  if (got !== want) throw new Error(`${file}: SHA-256 ${got}, а ожидалась ${want} — файл подменён или повреждён`)
+  return data
+}
+
 const pick = (files, suffix) => files[Object.keys(files).find((k) => k.endsWith(suffix))]
 
 function save(dir, name, data, exe = false) {
@@ -96,7 +123,7 @@ async function fetchWindows() {
 
   console.log(`▸ sing-box ${SING_BOX} для Windows`)
   const sb = unzip(
-    await get(
+    await getPinned(
       `https://github.com/SagerNet/sing-box/releases/download/v${SING_BOX}/sing-box-${SING_BOX}-windows-amd64.zip`
     ),
     (n) => /\/(sing-box\.exe|libcronet\.dll|LICENSE)$/.test(n)
@@ -112,7 +139,7 @@ async function fetchWindows() {
 
   console.log(`▸ wintun ${WINTUN} (драйвер виртуального адаптера для TUN)`)
   const wt = unzip(
-    await get(`https://www.wintun.net/builds/wintun-${WINTUN}.zip`),
+    await getPinned(`https://www.wintun.net/builds/wintun-${WINTUN}.zip`),
     (n) => n === 'wintun/bin/amd64/wintun.dll' || n === 'wintun/LICENSE.txt'
   )
   const dll = wt['wintun/bin/amd64/wintun.dll']
@@ -136,7 +163,7 @@ async function fetchHost() {
   try {
     const files = untar(
       gunzipSync(
-        await get(
+        await getPinned(
           `https://github.com/SagerNet/sing-box/releases/download/v${SING_BOX}/sing-box-${SING_BOX}-${os}-${arch}.tar.gz`
         )
       ),
@@ -146,6 +173,8 @@ async function fetchHost() {
     if (bin) save(dir, 'sing-box', bin, true)
     else console.log('  ⚠ в архиве нет бинарника')
   } catch (e) {
+    // Подмену не прощаем: это ядро уезжает и в сборку для macOS
+    if (/SHA-256/.test(e.message)) throw e
     console.log(`  ⚠ не удалось: ${e.message}`)
     console.log('    тесты run-validate и run-e2e без него не запустятся')
   }

@@ -191,9 +191,25 @@ export async function fetchBuffer(
     const max = opts.maxBytes ?? 32 * 1024 * 1024
     const len = Number(res.headers.get('content-length') ?? 0)
     if (len > max) throw new Error('Файл слишком большой')
-    const buf = Buffer.from(await res.arrayBuffer())
-    if (buf.length > max) throw new Error('Файл слишком большой')
-    return buf
+    if (!res.body) return Buffer.alloc(0)
+    /* Считаем по ходу чтения: arrayBuffer() сначала принял бы ответ целиком,
+       а Content-Length может отсутствовать или врать — тогда проверка размера
+       срабатывала бы уже после того, как память кончилась. */
+    const chunks: Buffer[] = []
+    let read = 0
+    const reader = res.body.getReader()
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        read += value.byteLength
+        if (read > max) throw new Error('Файл слишком большой')
+        chunks.push(Buffer.from(value))
+      }
+    } finally {
+      await reader.cancel().catch(() => {})
+    }
+    return Buffer.concat(chunks)
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw new Error(`${new URL(url).hostname} не ответил вовремя`)
     throw e

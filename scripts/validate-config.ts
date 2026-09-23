@@ -207,5 +207,29 @@ expect(
   `узлов ${mixed.length}, типы [${mixed.map((n) => n.type).join(', ')}]`
 )
 
+/* Поля *_path — пути к файлам на компьютере пользователя. Ядро в TUN-режиме
+   читает их с правами администратора, а сервер подписки о них знать не может. */
+const withPaths = parseSubscriptionBody(
+  JSON.stringify({
+    outbounds: [
+      {
+        type: 'ssh',
+        tag: 'Keys',
+        server: 'example.com',
+        server_port: 22,
+        user: 'root',
+        private_key_path: '/Users/me/.ssh/id_ed25519',
+        tls: { enabled: true, certificate_path: 'C:\\Windows\\win.ini', server_name: 'example.com' }
+      }
+    ]
+  })
+)
+const ob = withPaths[0]?.outbound as Record<string, any> | undefined
+expect(
+  'пути к локальным файлам из подписки вырезаны, остальное на месте',
+  !!ob && !('private_key_path' in ob) && !('certificate_path' in (ob.tls ?? {})) && ob.tls?.server_name === 'example.com' && ob.user === 'root',
+  JSON.stringify(ob)
+)
+
 console.log(`\n${fail === 0 ? '✅' : '❌'} итог: ${pass} ок, ${fail} провалено\n`)
 process.exit(fail === 0 ? 0 : 1)

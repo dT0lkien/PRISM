@@ -17,6 +17,7 @@ import {
   compareStrategies,
   expandStrategy,
   formatReport,
+  hostsAllowed,
   hostsStatus,
   ipsetContent,
   mergeHosts,
@@ -171,6 +172,15 @@ async function main(): Promise<void> {
   ok('повторное обновление ничего не множит', mergeHosts(merged, entries) === merged)
   const removed = removeHostsBlock(merged)
   ok('блок Prism убирается целиком', !removed.includes('discord.com') && removed.includes('127.0.0.1 localhost'))
+  const allowed = [
+    '149.154.167.220 web.telegram.org',
+    '140.82.121.3 github.com',
+    '146.75.22.132 raw.githubusercontent.com',
+    '162.159.138.232 discord.com'
+  ]
+  const foreign = ['6.6.6.6 online.sberbank.ru', '6.6.6.6 update.microsoft.com', '6.6.6.6 evilgithub.com', '6.6.6.6 github.com.evil.ru']
+  ok('Telegram, Discord и GitHub в hosts пускаются', allowed.every(hostsAllowed))
+  ok('чужие домены и подделки под свои — нет', !foreign.some(hostsAllowed), foreign.filter(hostsAllowed).join(', '))
 
   /* ─────────────────────────── тест стратегий ─────────────────────────── */
 
@@ -210,6 +220,18 @@ async function main(): Promise<void> {
   const work = mkdtempSync(join(tmpdir(), 'prism-zapret-zip-'))
   const arc = unzip(zip({ 'a.txt': 'привет', 'dir/b.bin': Buffer.from([0, 1, 2]) }))
   ok('распаковка zip', arc.get('a.txt')?.toString() === 'привет' && arc.get('dir/b.bin')?.length === 3)
+  /* zip-бомба: 16 МБ нулей, а в центральном каталоге записано «16 байт».
+     Без потолка inflate развернул бы всё и лишь потом сверил бы размер */
+  const bomb = zip({ 'zeros.bin': Buffer.alloc(16 * 1024 * 1024) })
+  const cd = bomb.lastIndexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]))
+  bomb.writeUInt32LE(16, cd + 24)
+  let bombErr = ''
+  try {
+    unzip(bomb)
+  } catch (e) {
+    bombErr = (e as Error).message
+  }
+  ok('zip-бомба с заниженным размером отвергнута', bombErr === 'Архив повреждён', bombErr || 'распаковалась')
 
   store.load()
   const good = join(work, 'good.zip')

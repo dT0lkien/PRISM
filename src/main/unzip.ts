@@ -41,9 +41,18 @@ export function unzip(buf: Buffer, maxTotal = 64 * 1024 * 1024): Map<string, Buf
     const leLen = buf.readUInt16LE(localOff + 28)
     const dataOff = localOff + 30 + lnLen + leLen
     const raw = buf.subarray(dataOff, dataOff + compSize)
-    if (method === 0) out.set(name, raw)
-    else if (method === 8) out.set(name, inflateRawSync(raw))
-    else throw new Error(`Неподдерживаемое сжатие в архиве (${method})`)
+    if (method !== 0 && method !== 8) throw new Error(`Неподдерживаемое сжатие в архиве (${method})`)
+    /* Размер в заголовке пишет тот, кто собрал архив. Без потолка у inflate
+       запись «10 байт», которая разворачивается в гигабайты, уронила бы
+       main-процесс раньше проверки maxTotal выше. */
+    let data: Buffer
+    try {
+      data = method === 0 ? raw : inflateRawSync(raw, { maxOutputLength: Math.max(size, 1) })
+    } catch {
+      throw new Error('Архив повреждён')
+    }
+    if (data.length !== size) throw new Error('Архив повреждён')
+    out.set(name, data)
   }
   return out
 }
