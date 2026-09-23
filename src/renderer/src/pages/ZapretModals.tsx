@@ -608,6 +608,12 @@ export function HostsModal({ open, onClose }: { open: boolean; onClose: () => vo
               </span>
             </div>
           </div>
+          {info.skipped > 0 && (
+            <p className="mut" style={note}>
+              Ещё {info.skipped} {plural(info.skipped, 'запись', 'записи', 'записей')} из списка сборки — для других сайтов. Их Prism не
+              пишет: менять hosts он готов только для Telegram, Discord и GitHub.
+            </p>
+          )}
           <pre className="upd-notes mono" style={{ fontSize: 11, maxHeight: 220 }}>
             {info.entries.join('\n')}
           </pre>

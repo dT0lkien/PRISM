@@ -3,7 +3,7 @@
 import { EventEmitter } from 'node:events'
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { promisify } from 'node:util'
-import { writeFileSync, readFileSync, existsSync } from 'node:fs'
+import { chmodSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { createConnection } from 'node:net'
 import type { CoreState, ServerNode } from '@shared/types'
@@ -170,7 +170,10 @@ export class Core extends EventEmitter {
       cachePath: paths.cache,
       clashSecret: d.clashSecret
     })
-    writeFileSync(paths.runtimeConfig, JSON.stringify(cfg, null, 2), 'utf8')
+    /* Те же секреты, что в store.json, — и те же права 0600. mode действует
+       только при создании файла, поэтому у старых установок чиним явно. */
+    writeFileSync(paths.runtimeConfig, JSON.stringify(cfg, null, 2), { encoding: 'utf8', mode: 0o600 })
+    if (!IS_WIN) chmodSync(paths.runtimeConfig, 0o600)
     try {
       await exec(paths.core, ['check', '-c', paths.runtimeConfig], {
         timeout: 30000,

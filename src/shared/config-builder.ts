@@ -398,6 +398,8 @@ function joinPath(dir: string, file: string): string {
 export function deepMerge<T extends Json>(base: T, patch: Json): T {
   const out: Json = Array.isArray(base) ? [...(base as any)] : { ...base }
   for (const [k, v] of Object.entries(patch)) {
+    // JSON.parse делает __proto__ обычным ключом, а присваивание — сменой прототипа
+    if (k === '__proto__') continue
     if (Array.isArray(v)) {
       out[k] = v
     } else if (v && typeof v === 'object') {

@@ -1,7 +1,8 @@
 import { BrowserWindow, app, clipboard, dialog, ipcMain, shell } from 'electron'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs'
+import { writeFileSync, mkdirSync, existsSync, readFileSync, rmSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
 import { basename, join, dirname } from 'node:path'
 import type { AppRule, ConnectionItem, RoutingRule, Settings, Subscription, ZapretCheck, ZapretConfig, ZapretTestKind } from '@shared/types'
 import { buildConfig } from '@shared/config-builder'
@@ -48,6 +49,20 @@ export function snapshot() {
     activeNodeId: d.activeNodeId,
     totals: d.totals,
     zapret: d.zapret
+  }
+}
+
+/* Свой ли адрес: в разработке renderer живёт на dev-сервере, в проде — на file://
+   из loadFile. Нужно именно так, а не «запрещать всё»: перезагрузка страницы и
+   полный reload от HMR — это навигация на тот же URL, и глухой запрет сломал бы
+   npm run dev. У file:// origin равен "null", поэтому сверяем протокол. */
+export function isAppUrl(url: string): boolean {
+  const devUrl = process.env['ELECTRON_RENDERER_URL']
+  try {
+    const u = new URL(url)
+    return !app.isPackaged && devUrl ? u.origin === new URL(devUrl).origin : u.protocol === 'file:'
+  } catch {
+    return false
   }
 }
 
@@ -188,8 +203,14 @@ const LIST_NAMES = ['general', 'google', 'exclude', 'ipsetExclude', 'ipset', 'ex
 /* ─────────────────────── регистрация обработчиков ─────────────────────── */
 
 export function registerIpc(): void {
+  /* Каналы отвечают только своей странице. Навигация наружу и новые окна уже
+     закрыты, так что это страховка: если чужая страница всё же окажется в
+     окне или во фрейме, моста к правам администратора у неё не будет. */
   const h = <A extends unknown[], R>(ch: string, fn: (...a: A) => R | Promise<R>): void => {
-    ipcMain.handle(ch, async (_e, ...args) => fn(...(args as A)))
+    ipcMain.handle(ch, async (e, ...args) => {
+      if (!isAppUrl(e.senderFrame?.url ?? '')) throw new Error(`${ch}: вызов не из окна Prism`)
+      return fn(...(args as A))
+    })
   }
 
   /* — общее — */
@@ -265,7 +286,12 @@ export function registerIpc(): void {
       await core.applyIfRunning()
     }
     if (before.autoUpdate !== after.autoUpdate) updater.reschedule()
-    if (before.autoStart !== after.autoStart || before.startElevated !== after.startElevated) {
+    // startMinimized тоже: флаг --minimized записан в самой задаче автозапуска
+    if (
+      before.autoStart !== after.autoStart ||
+      before.startElevated !== after.startElevated ||
+      before.startMinimized !== after.startMinimized
+    ) {
       await setAutoStart(after.autoStart, after.startElevated, after.startMinimized).catch((e) =>
         toast('warn', String(e.message ?? e))
       )
@@ -519,14 +545,17 @@ export function registerIpc(): void {
       cachePath: paths.cache,
       clashSecret: d.clashSecret
     })
-    const tmp = join(paths.data, 'check.json')
+    // В конфиге ключи всех серверов и clashSecret — после проверки не оставляем
+    const tmp = join(paths.data, `check-${randomBytes(4).toString('hex')}.json`)
     try {
-      writeFileSync(tmp, JSON.stringify(merged, null, 2))
+      writeFileSync(tmp, JSON.stringify(merged, null, 2), { mode: 0o600 })
       await exec(paths.core, ['check', '-c', tmp], { timeout: 30000, windowsHide: true, cwd: dirname(paths.core) })
       return { ok: true }
     } catch (e: any) {
       const out = `${e.stdout ?? ''}${e.stderr ?? ''}`.trim() || String(e.message ?? e)
       return { ok: false, error: out.split('\n')[0].replace(/\x1B\[[0-9;]*[A-Za-z]/g, '') }
+    } finally {
+      rmSync(tmp, { force: true })
     }
   })
 

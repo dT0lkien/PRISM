@@ -1,29 +1,39 @@
 import { app, BrowserWindow, Menu, Tray, nativeImage, shell } from 'electron'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { store, paths } from './store'
 import { core } from './core'
 import { updater } from './updater'
-import { registerIpc, setMainWindow, snapshot, wireCoreEvents } from './ipc'
-import { clearStaleProxy, clearSystemProxy, emergencyCleanupSync, isElevated, killPidSync, killStrayCores, IS_WIN } from './win'
+import { isAppUrl, registerIpc, setMainWindow, snapshot, wireCoreEvents } from './ipc'
+import {
+  clearStaleProxy,
+  clearSystemProxy,
+  emergencyCleanupSync,
+  isElevated,
+  killPidSync,
+  killStrayCores,
+  setAutoStart,
+  IS_WIN
+} from './win'
 import { zapret } from './zapret'
 import { fetchSubscription, mergeSubscriptionNodes } from './subs'
 
 const isDev = !app.isPackaged
 
-/* Свой ли адрес: в разработке renderer живёт на dev-сервере, в проде — на file://
-   из loadFile. Нужно именно так, а не «запрещать всё»: перезагрузка страницы и
-   полный reload от HMR — это навигация на тот же URL, и глухой запрет сломал бы
-   npm run dev. У file:// origin равен "null", поэтому сверяем протокол. */
-function isAppUrl(url: string): boolean {
-  const devUrl = process.env['ELECTRON_RENDERER_URL']
+/* reg, icacls, schtasks, powershell и прочие утилиты Prism зовёт по имени, а
+   Node в Windows ищет такой файл сначала в текущем каталоге и только потом в
+   PATH — проверено на живой машине. Текущий каталог достаётся от того, кто
+   запустил Prism: откройте портативную версию прямо из «Загрузок», и
+   подброшенный туда reg.exe запустится с правами администратора. Каталог
+   самого exe доверен ровно настолько же, насколько сам exe, — уходим туда. */
+if (IS_WIN) {
   try {
-    const u = new URL(url)
-    return isDev && devUrl ? u.origin === new URL(devUrl).origin : u.protocol === 'file:'
+    process.chdir(dirname(process.execPath))
   } catch {
-    return false
+    /* остаёмся где были */
   }
 }
+
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
 let quitting = false
@@ -326,11 +336,18 @@ app.whenReady().then(async () => {
   updater.init()
 
   const st = store.get().settings
+  const elevated = await isElevated()
   if (st.autoConnect) {
-    const elevated = await isElevated()
     if (st.captureMode !== 'tun' || elevated) {
       setTimeout(() => void core.start(), 1200)
     }
+  }
+
+  /* Задачи автозапуска, созданные до 1.6.3, ведут в путь с лишними слэшами и
+     не срабатывают. Пересоздаём задачу при каждом запуске с правами — это же
+     держит путь верным, если Prism переустановили в другой каталог. */
+  if (IS_WIN && st.autoStart && st.startElevated && elevated) {
+    void setAutoStart(true, true, st.startMinimized).catch((e) => console.error('[main] задача автозапуска:', e))
   }
 
   app.on('activate', () => {

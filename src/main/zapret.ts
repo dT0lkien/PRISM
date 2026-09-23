@@ -197,10 +197,55 @@ function spawnMessage(e: NodeJS.ErrnoException): string {
 
 let rootSecured = false
 
+/* Кому можно владеть каталогом Prism в ProgramData: администраторам и SYSTEM.
+   ProgramData открыт обычным пользователям на создание каталогов, и раньше
+   чужой заранее созданный «Prism» просто перехватывался: icacls забирал
+   владение и переписывал права. Но перехват не отбирает дескрипторы, которые
+   прежний хозяин успел открыть, а сам каталог Prism создавал с правами
+   ProgramData — и до icacls в нём мог похозяйничать любой пользователь.
+   Теперь чужой каталог отодвигается в сторону, а свой создаётся сразу с
+   закрытыми правами: окна, в которое можно что-то подложить, нет. */
+const BASE_SCRIPT = String.raw`
+$ErrorActionPreference = 'Stop'
+$result = 'OK'
+try {
+  $p = $env:PRISM_ZAPRET_BASE
+  # Путь Prism берёт из %ProgramData%, а её пользователь переопределит без прав
+  # администратора — и служба SYSTEM запускала бы winws.exe из его каталога.
+  # Системный каталог Windows от переменных окружения не зависит.
+  $expected = Join-Path ([IO.Path]::GetPathRoot([Environment]::SystemDirectory)) 'ProgramData\Prism'
+  if ($p -ne $expected) { throw ('ожидался ' + $expected + ', а переменная ProgramData ведёт в ' + $p) }
+  $trusted = @('S-1-5-32-544', 'S-1-5-18')
+  function Owner {
+    try { (Get-Acl -LiteralPath $p).GetOwner([Security.Principal.SecurityIdentifier]).Value } catch { '' }
+  }
+  if (Test-Path -LiteralPath $p) {
+    $link = (Get-Item -LiteralPath $p -Force).Attributes -band [IO.FileAttributes]::ReparsePoint
+    if ($link -or $trusted -notcontains (Owner)) {
+      Rename-Item -LiteralPath $p -NewName ('Prism.untrusted-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+    }
+  }
+  if (-not (Test-Path -LiteralPath $p)) {
+    $sd = New-Object Security.AccessControl.DirectorySecurity
+    $sd.SetAccessRuleProtection($true, $false)
+    $sd.SetOwner([Security.Principal.SecurityIdentifier]'S-1-5-32-544')
+    foreach ($r in @(@('S-1-5-32-544', 'FullControl'), @('S-1-5-18', 'FullControl'), @('S-1-5-32-545', 'ReadAndExecute'))) {
+      $sd.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule(([Security.Principal.SecurityIdentifier]$r[0]), $r[1], 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
+    }
+    [void][IO.Directory]::CreateDirectory($p, $sd)
+  }
+  # Кто-то успел создать каталог между проверкой и созданием — не принимаем
+  if ($trusted -notcontains (Owner)) { throw ('владелец каталога — не администраторы: ' + (Owner)) }
+} catch {
+  $result = 'ERR:' + $_.Exception.Message
+}
+${PS_UTF8}
+Write-Output $result
+`
+
 /**
- * Создаёт корень и закрывает его на запись. ProgramData открыт на создание
- * каталогов обычным пользователям, поэтому «Prism» мог заранее создать кто
- * угодно — забираем владение и переписываем права целиком, а ссылки на
+ * Создаёт корень и закрывает его на запись. Каталог в ProgramData должен
+ * принадлежать администраторам или SYSTEM (см. BASE_SCRIPT), а ссылки на
  * другие каталоги не принимаем вовсе.
  */
 async function ensureRoot(): Promise<void> {
@@ -212,6 +257,10 @@ async function ensureRoot(): Promise<void> {
         throw new Error(`${p} — ссылка на другой каталог, пользоваться им небезопасно`)
       }
     }
+  }
+  if (IS_WIN && !rootSecured) {
+    const out = (await psUtf8(BASE_SCRIPT, 60000, { PRISM_ZAPRET_BASE: base })).trim()
+    if (out !== 'OK') throw new Error(`Каталог ${base} небезопасен, zapret им не пользуется: ${out.replace(/^ERR:/, '')}`)
   }
   noLinks()
   mkdirSync(join(root, 'packs'), { recursive: true })

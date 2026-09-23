@@ -10,6 +10,7 @@ import {
   ZAPRET_HOSTS_URL,
   ZAPRET_IPSET_URL,
   ZAPRET_REPO_URL,
+  hostsAllowed,
   hostsEntries,
   hostsStatus,
   isIpLine,
@@ -309,18 +310,21 @@ export async function resetNetwork(): Promise<void> {
 /* ─────────────────────────── hosts ─────────────────────────── */
 
 const HOSTS_FILE = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'drivers', 'etc', 'hosts')
-let hostsCache: { at: number; entries: string[] } | null = null
+let hostsCache: { at: number; entries: string[]; skipped: number } | null = null
 
-async function remoteHosts(): Promise<string[]> {
-  if (hostsCache && Date.now() - hostsCache.at < 5 * 60_000) return hostsCache.entries
+async function remoteHosts(): Promise<{ entries: string[]; skipped: number }> {
+  if (hostsCache && Date.now() - hostsCache.at < 5 * 60_000) return hostsCache
   const text = (await fetchBuffer(`${ZAPRET_HOSTS_URL}?t=${Date.now()}`, { maxBytes: 256 * 1024 })).toString('utf8')
-  const entries = hostsEntries(text)
+  const all = hostsEntries(text)
   // В системный hosts уезжают только пары «адрес имя» — ничего похожего на что-то ещё
-  if (!entries.length || entries.length > 1000 || entries.some((l) => !/^[0-9a-f.:]+\s+[a-z0-9.\-]+$/i.test(l))) {
+  if (!all.length || all.length > 1000 || all.some((l) => !/^[0-9a-f.:]+\s+[a-z0-9.\-]+$/i.test(l))) {
     throw new Error('Список hosts из репозитория выглядит странно — применять не буду')
   }
-  hostsCache = { at: Date.now(), entries }
-  return entries
+  // И только для своих доменов: чужие записи не пишем, но и всё остальное не бросаем
+  const entries = all.filter(hostsAllowed)
+  if (!entries.length) throw new Error('В списке hosts из репозитория нет записей для Telegram, Discord и GitHub — применять нечего')
+  hostsCache = { at: Date.now(), entries, skipped: all.length - entries.length }
+  return hostsCache
 }
 
 /* latin1 — чтобы байт в байт сохранить то, чего мы не понимаем: комментарии
@@ -328,8 +332,8 @@ async function remoteHosts(): Promise<string[]> {
 const readHosts = (): string => (existsSync(HOSTS_FILE) ? readFileSync(HOSTS_FILE, 'latin1') : '')
 
 export async function hostsInfo(): Promise<ZapretHostsInfo> {
-  const entries = await remoteHosts()
-  return { ...hostsStatus(readHosts(), entries), entries }
+  const { entries, skipped } = await remoteHosts()
+  return { ...hostsStatus(readHosts(), entries), entries, skipped }
 }
 
 function writeHosts(text: string): void {
@@ -345,10 +349,10 @@ function writeHosts(text: string): void {
 }
 
 export async function hostsApply(): Promise<ZapretHostsInfo> {
-  const entries = await remoteHosts()
+  const { entries, skipped } = await remoteHosts()
   writeHosts(mergeHosts(readHosts(), entries))
   await quiet('ipconfig', ['/flushdns'])
-  return { ...hostsStatus(readHosts(), entries), entries }
+  return { ...hostsStatus(readHosts(), entries), entries, skipped }
 }
 
 export async function hostsRemove(): Promise<ZapretHostsInfo> {

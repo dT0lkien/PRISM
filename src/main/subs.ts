@@ -31,6 +31,23 @@ const ALLOWED_OUTBOUND_TYPES = new Set<NodeType>([
   'shadowtls'
 ])
 
+/* Поля *_path — ссылки на файлы на этом компьютере: сертификат, ключ, ECH.
+   Серверу подписки знать о них неоткуда, а ядро в TUN-режиме читает их с
+   правами администратора: ssh-outbound с private_key_path на ~/.ssh/id_ed25519
+   предъявил бы личный ключ пользователя чужому серверу. У каждого такого поля
+   есть встроенный вариант (certificate, private_key, config), так что честной
+   подписке это не мешает. __proto__ заодно: JSON.parse делает его обычным
+   ключом, а присваивание — сменой прототипа. */
+function dropFilePaths(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(dropFilePaths)
+  if (!v || typeof v !== 'object') return v
+  const out: Record<string, unknown> = {}
+  for (const [k, x] of Object.entries(v)) {
+    if (!k.endsWith('_path') && k !== '__proto__') out[k] = dropFilePaths(x)
+  }
+  return out
+}
+
 export interface FetchedSub {
   nodes: ServerNode[]
   userInfo?: Subscription['userInfo']
@@ -75,7 +92,7 @@ export function parseSubscriptionBody(body: string, subscriptionId?: string): Se
           type: ob.type as NodeType,
           server: String(ob.server ?? ''),
           port: Number(ob.server_port ?? 0),
-          outbound: rest,
+          outbound: dropFilePaths(rest) as Record<string, unknown>,
           subscriptionId,
           createdAt: Date.now()
         })
