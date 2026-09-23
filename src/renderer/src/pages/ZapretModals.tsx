@@ -522,6 +522,7 @@ export function TestModal({ open, onClose }: { open: boolean; onClose: () => voi
     /* ── итог ── */
     const base = test.baseline ?? []
     const fixed = services && best ? best.services!.filter((s) => s.status === 'ok' && base.find((b) => b.id === s.id)?.status !== 'ok') : []
+    const partly = services && best ? best.services!.filter((s) => s.status === 'partial') : []
     const failing = services && best ? best.services!.filter((s) => s.status !== 'ok') : []
     const appBlocked = failing.some((s) => s.id === 'telegram-app') && base.find((b) => b.id === 'telegram-app')?.status === 'fail'
     const needExtra = !cfg.extraDomains && failing.some((s) => s.id === 'telegram-web' || s.id === 'spotify')
@@ -560,7 +561,8 @@ export function TestModal({ open, onClose }: { open: boolean; onClose: () => voi
                     ? 'Загляните в «Диагностику»: чаще всего мешает другой обход, VPN или антивирус.'
                     : [
                         fixed.length ? `Обход открыл: ${names(fixed)}.` : 'Всё, что открывается, открывается и без обхода.',
-                        failing.length ? `Не открывается: ${names(failing)}.` : ''
+                        partly.length ? `Частично: ${names(partly)}.` : '',
+                        failing.length > partly.length ? `Не открывается: ${names(failing.filter((s) => s.status === 'fail'))}.` : ''
                       ]
                         .filter(Boolean)
                         .join(' ')}
