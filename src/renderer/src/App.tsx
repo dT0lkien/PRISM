@@ -22,6 +22,7 @@ import {
 import { CHANGELOG } from '@shared/changelog'
 import { useStore, type Page } from './store'
 import { Modal, spring } from './ui'
+import { CrtScreen } from './crt'
 import Dashboard from './pages/Dashboard'
 import Servers from './pages/Servers'
 import Routing from './pages/Routing'
@@ -110,7 +111,7 @@ export default function App(): JSX.Element {
 
   return (
     <div className="app" data-status={status}>
-      <Aurora />
+      <Aurora crt={snap.settings.theme === 'crt'} />
 
       <div className="titlebar">
         <div className="brand">
@@ -273,12 +274,19 @@ function UpdateChip(): JSX.Element | null {
   )
 }
 
-function Aurora(): JSX.Element {
+/** Живой фон окна. В теме «Терминал» вместо пятен свечения — ЭЛТ-экран */
+function Aurora({ crt }: { crt?: boolean }): JSX.Element {
   return (
     <div className="aurora" aria-hidden>
-      <span className="a1" />
-      <span className="a2" />
-      <span className="a3" />
+      {crt ? (
+        <CrtScreen />
+      ) : (
+        <>
+          <span className="a1" />
+          <span className="a2" />
+          <span className="a3" />
+        </>
+      )}
     </div>
   )
 }

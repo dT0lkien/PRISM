@@ -38,7 +38,7 @@ export const DEFAULT_SETTINGS: Settings = {
   closeToTray: true,
   startMinimized: false,
 
-  theme: 'dark',
+  theme: 'crt',
   accent: 'aurora',
   graphStyle: 'mirror',
   language: 'ru',

@@ -1742,6 +1742,17 @@ textarea.input {
   cursor: pointer;
   width: 100%;
 }
+/* В свёрнутом меню (см. медиазапрос у .sidebar) текст не помещался и вылезал
+   наружу — остаётся значок, подпись есть во всплывающей подсказке. Правило
+   стоит здесь, а не рядом с тем запросом: иначе его перебивает .upd-dot выше. */
+@media (max-width: 1060px) {
+  .upd-dot {
+    font-size: 0;
+    gap: 0;
+    justify-content: center;
+    padding: 7px;
+  }
+}
 
 
 /* подписи масштаба по краям графика */
@@ -3666,4 +3677,651 @@ textarea.input {
 [data-theme='chrome'] .accent-dot,
 [data-theme='chrome'] .theme-preview {
   border-radius: 2px;
+}
+
+/* ═══════════ «Терминал» — ЭЛТ-экран с бегущим журналом ═══════════
+   Фон окна — живой кинескоп (crt.tsx): журнал ядра точечной матрицей,
+   развёртка, выпуклое стекло, глитчи. Интерфейс поверх — фосфор на тёмно-синем:
+   моноширинные заголовки и подписи, выделение инверсией, как в терминале,
+   описания — обычным шрифтом, чтобы длинный текст читался. */
+[data-theme='crt'] {
+  --bg: #02040d;
+  --bg-2: #060a1c;
+  --panel: rgba(6, 10, 28, 0.86);
+  --panel-2: rgba(14, 21, 52, 0.92);
+  --panel-3: rgba(150, 175, 255, 0.13);
+  --line: rgba(150, 175, 255, 0.15);
+  --line-2: rgba(170, 195, 255, 0.32);
+  --text: #e6ecff;
+  --muted: #a3b0da;
+  --dim: #6f7ca8;
+  /* Плёнка тонкая: кинескоп должен остаться виден, контраст держат сами панели */
+  --scrim: linear-gradient(180deg, rgba(2, 4, 13, 0.12), rgba(2, 4, 13, 0.34));
+
+  --ok: #5ef0a0;
+  --warn: #ffcc5c;
+  --err: #ff5d73;
+
+  /* Почти прямые углы — у терминала скруглений не бывает */
+  --r-sm: 2px;
+  --r: 3px;
+  --r-lg: 5px;
+  --r-xl: 7px;
+
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.75);
+
+  --mono: 'Cascadia Mono', 'JetBrains Mono', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  /* Фосфор: акцент, разбавленный белым, — им светится всё «живое» */
+  --phos: color-mix(in oklab, var(--accent-1) 42%, #fff);
+  --phos-glow: 0 0 10px color-mix(in oklab, var(--accent-1) 60%, transparent);
+  --halo: 0 0 3px rgba(2, 4, 13, 0.95), 0 0 9px rgba(2, 4, 13, 0.9);
+  --ink: #040816;
+}
+
+/* ── фон: кинескоп вместо пятен свечения ── */
+[data-theme='crt'] .aurora {
+  inset: 0;
+  opacity: 1;
+  filter: none;
+  /* Запасной кадр, пока WebGL не поднялся или его нет вовсе */
+  background:
+    repeating-linear-gradient(180deg, transparent 0 2px, rgba(0, 0, 0, 0.45) 2px 3px),
+    radial-gradient(75% 70% at 50% 46%, #121b40, #03061a 72%, #010208);
+}
+[data-theme='crt'] .app[data-status='stopped'] .aurora,
+[data-theme='crt'] .app[data-status='error'] .aurora {
+  /* Яркость кинескопа по состоянию ведёт шейдер, а не прозрачность слоя */
+  opacity: 1;
+}
+.crt,
+.crt canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Развёртка поверх всего интерфейса: без неё панели выглядят наклейками на экране */
+[data-theme='crt'] .app::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+  background: repeating-linear-gradient(180deg, transparent 0 2px, rgba(0, 0, 0, 0.13) 2px 3px);
+}
+
+/* Размытие под панелями пересчитывалось бы на каждом кадре кинескопа —
+   на слабой видеокарте это заметно. Панели плотные, размытие им не нужно. */
+[data-theme='crt'] .titlebar,
+[data-theme='crt'] .sidebar,
+[data-theme='crt'] .card,
+[data-theme='crt'] .table th,
+[data-theme='crt'] .backdrop,
+[data-theme='crt'] .toast,
+[data-theme='crt'] .graph .tip {
+  backdrop-filter: none;
+}
+
+/* Заголовки и подписи, лежащие прямо на кинескопе, путались с бегущим кодом.
+   Тёмный ореол наследуется всем текстом рабочей области: на панелях он
+   невидим, а на открытом экране отделяет буквы от фона. */
+[data-theme='crt'] .main {
+  text-shadow: var(--halo);
+}
+/* …кроме светлых «инверсных» элементов: там ореол превратил бы буквы в кляксы */
+[data-theme='crt'] .btn.primary,
+[data-theme='crt'] .seg button.active,
+[data-theme='crt'] .act-seg button.active {
+  text-shadow: none;
+}
+
+[data-theme='crt'] ::selection {
+  background: var(--phos);
+  color: var(--ink);
+}
+[data-theme='crt'] ::-webkit-scrollbar-thumb {
+  border-radius: 0;
+  background: rgba(150, 175, 255, 0.2);
+  background-clip: content-box;
+}
+
+/* ── заголовки и подписи: моноширинный фосфор ── */
+[data-theme='crt'] .titlebar .brand,
+[data-theme='crt'] .tb-status,
+[data-theme='crt'] .nav-item .lbl,
+[data-theme='crt'] .nav-item .badge,
+[data-theme='crt'] .sidebar .foot,
+[data-theme='crt'] .page-head h1,
+[data-theme='crt'] .section-title,
+[data-theme='crt'] .hero h2,
+[data-theme='crt'] .stat,
+[data-theme='crt'] .btn,
+[data-theme='crt'] .seg button,
+[data-theme='crt'] .act-seg button,
+[data-theme='crt'] .chip,
+[data-theme='crt'] .ping,
+[data-theme='crt'] .input,
+[data-theme='crt'] .select,
+[data-theme='crt'] .table,
+[data-theme='crt'] .graph .legend,
+[data-theme='crt'] .graph .scale,
+[data-theme='crt'] .graph .tip,
+[data-theme='crt'] .modal header h3,
+[data-theme='crt'] .empty b,
+[data-theme='crt'] .theme-card .name,
+[data-theme='crt'] .whatsnew .date,
+[data-theme='crt'] .upd-dot,
+[data-theme='crt'] .node .mark,
+[data-theme='crt'] .kbd {
+  font-family: var(--mono);
+}
+
+[data-theme='crt'] .page-head h1 {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 2.4px;
+  text-transform: uppercase;
+  color: var(--phos);
+  text-shadow: var(--phos-glow), var(--halo);
+  /* Заголовок «печатается» со сдвигом каналов при каждом входе на страницу */
+  animation: crt-type 0.5s steps(14, end) both;
+}
+/* Мигающий курсор после заголовка */
+[data-theme='crt'] .page-head h1::after {
+  content: '';
+  display: inline-block;
+  width: 0.6em;
+  height: 0.95em;
+  margin-left: 8px;
+  vertical-align: -0.12em;
+  background: var(--phos);
+  box-shadow: var(--phos-glow);
+  animation: crt-blink 1.05s steps(1) infinite;
+}
+[data-theme='crt'] .page-head p {
+  color: #b9c4ea;
+}
+/* Шапка страницы лежит на открытом экране, и бегущий код прошивал подпись
+   насквозь. Тёмная плашка с фосфорной чертой слева — как строка приглашения */
+[data-theme='crt'] .page-head {
+  padding: 13px 18px 14px;
+  border-left: 2px solid var(--phos);
+  background: linear-gradient(90deg, rgba(2, 4, 13, 0.9), rgba(2, 4, 13, 0.78) 55%, rgba(2, 4, 13, 0.3));
+  box-shadow: -6px 0 18px -8px color-mix(in oklab, var(--accent-1) 60%, transparent);
+}
+@keyframes crt-type {
+  0% {
+    clip-path: inset(0 100% 0 0);
+    text-shadow: -3px 0 #ff2a6d, 3px 0 #2de2ff;
+  }
+  70% {
+    text-shadow: -1px 0 #ff2a6d, 1px 0 #2de2ff;
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    text-shadow: var(--phos-glow), var(--halo);
+  }
+}
+@keyframes crt-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Раздел — строка приглашения: «>», название и пунктир до края */
+[data-theme='crt'] .section-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 0;
+  font-size: 10.5px;
+  letter-spacing: 2.2px;
+  color: var(--muted);
+  background: linear-gradient(90deg, rgba(2, 4, 13, 0.92), rgba(2, 4, 13, 0.7) 50%, rgba(2, 4, 13, 0.25));
+}
+[data-theme='crt'] .section-title::before {
+  content: '>';
+  color: var(--phos);
+  text-shadow: var(--phos-glow), var(--halo);
+}
+[data-theme='crt'] .section-title::after {
+  content: '';
+  flex: 1;
+  border-top: 1px dashed var(--line-2);
+}
+
+/* Пояснение к стратегиям тоже лежит на открытом экране */
+[data-theme='crt'] .zap-lead {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  color: #b9c4ea;
+  background: linear-gradient(90deg, rgba(2, 4, 13, 0.9), rgba(2, 4, 13, 0.75) 60%, rgba(2, 4, 13, 0.35));
+}
+
+/* ── титульная панель и меню ── */
+[data-theme='crt'] .titlebar {
+  background: rgba(2, 4, 13, 0.84);
+  border-bottom: 1px solid var(--line);
+}
+[data-theme='crt'] .titlebar .brand {
+  font-size: 12px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--phos);
+  text-shadow: var(--phos-glow);
+}
+[data-theme='crt'] .titlebar .brand img {
+  border-radius: 2px;
+}
+[data-theme='crt'] .tb-status {
+  font-size: 10.5px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  border-radius: 2px;
+  background: rgba(2, 4, 13, 0.8);
+  border-color: var(--line-2);
+}
+[data-theme='crt'] .tb-status .dot {
+  border-radius: 1px;
+}
+
+[data-theme='crt'] .sidebar {
+  background: rgba(2, 4, 13, 0.86);
+  border-right: 1px solid var(--line);
+}
+[data-theme='crt'] .nav-item {
+  border-radius: 2px;
+}
+[data-theme='crt'] .nav-item .lbl {
+  font-size: 11.5px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+/* Выделение инверсией — как курсор в полноэкранной программе терминала */
+[data-theme='crt'] .nav-item .glow,
+[data-theme='crt'] .seg .pill,
+[data-theme='crt'] .act-seg .pill {
+  border-radius: 2px;
+  background: var(--phos);
+  border: none;
+  box-shadow: 0 0 16px color-mix(in oklab, var(--accent-1) 45%, transparent);
+}
+[data-theme='crt'] .nav-item.active,
+[data-theme='crt'] .seg button.active,
+[data-theme='crt'] .act-seg button.active {
+  color: var(--ink);
+}
+[data-theme='crt'] .nav-item.active .badge {
+  background: rgba(4, 8, 22, 0.18);
+  color: var(--ink);
+}
+[data-theme='crt'] .nav-item .badge {
+  border-radius: 2px;
+}
+[data-theme='crt'] .sidebar .foot {
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+
+/* ── панели ── */
+[data-theme='crt'] .card,
+[data-theme='crt'] .modal,
+[data-theme='crt'] .app-row,
+[data-theme='crt'] .node,
+[data-theme='crt'] .rule,
+[data-theme='crt'] .preset,
+[data-theme='crt'] .theme-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: inset 0 0 28px rgba(110, 140, 255, 0.045), 0 12px 34px rgba(0, 0, 0, 0.45);
+}
+[data-theme='crt'] .card.hoverable:hover,
+[data-theme='crt'] .node:hover,
+[data-theme='crt'] .preset:hover,
+[data-theme='crt'] .app-row:hover,
+[data-theme='crt'] .theme-card:hover {
+  background: var(--panel-2);
+  border-color: var(--line-2);
+}
+/* Главная карточка почти прозрачна — кнопка подключения стоит прямо на кинескопе */
+/* Тёмное пятно под статусом: подпись «Финляндия · TUN…» иначе тонула в
+   бегущем коде. Именно фоном карточки, а не ::before — тот рисуется поверх
+   текста и гасил его. Отступ в пикселях: кнопка сверху всегда одной высоты,
+   а высота карточки меняется с шириной окна. */
+[data-theme='crt'] .card.hero {
+  background:
+    radial-gradient(300px 62px at 50% 272px, rgba(2, 4, 13, 0.88), transparent),
+    linear-gradient(180deg, rgba(2, 4, 14, 0.1), rgba(2, 4, 14, 0.5) 60%, rgba(2, 4, 14, 0.7));
+  border-color: var(--line-2);
+}
+[data-theme='crt'] .hero::before {
+  background: radial-gradient(60% 55% at 50% 22%, color-mix(in oklab, var(--accent-1) 16%, transparent), transparent 70%);
+}
+[data-theme='crt'] .hero h2 {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+[data-theme='crt'] .app[data-status='running'] .hero h2 {
+  color: var(--phos);
+  text-shadow: var(--phos-glow), var(--halo);
+}
+[data-theme='crt'] .app[data-status='error'] .hero h2 {
+  color: var(--err);
+  text-shadow: 0 0 10px color-mix(in oklab, var(--err) 55%, transparent);
+}
+
+[data-theme='crt'] .stat-grid {
+  background: var(--line);
+}
+[data-theme='crt'] .stat {
+  background: rgba(3, 6, 18, 0.9);
+}
+[data-theme='crt'] .stat .k {
+  font-size: 10px;
+  letter-spacing: 1.4px;
+}
+[data-theme='crt'] .stat .v {
+  font-size: 16px;
+  color: var(--phos);
+  text-shadow: var(--phos-glow);
+}
+/* Под графиком тёмная подложка — иначе линии теряются на бегущем тексте */
+[data-theme='crt'] .graph {
+  background: rgba(2, 4, 12, 0.55);
+  box-shadow: 0 0 0 1px var(--line);
+}
+[data-theme='crt'] .graph svg {
+  filter: drop-shadow(0 0 4px color-mix(in oklab, var(--accent-1) 55%, transparent));
+}
+[data-theme='crt'] .graph .legend {
+  top: 6px;
+  right: 8px;
+  font-size: 10.5px;
+  letter-spacing: 0.6px;
+}
+[data-theme='crt'] .graph .scale {
+  right: 8px;
+}
+[data-theme='crt'] .graph .scale.top {
+  top: 26px;
+}
+[data-theme='crt'] .graph .tip {
+  background: rgba(3, 6, 18, 0.96);
+}
+
+/* ── кнопка подключения: маленький кинескоп ── */
+[data-theme='crt'] .power .ring {
+  border-style: dashed;
+  border-color: var(--line-2);
+}
+[data-theme='crt'] .power .ring.r2 {
+  border-style: dotted;
+}
+[data-theme='crt'] .power.on .ring.r2 {
+  border-color: color-mix(in oklab, var(--accent-1) 55%, transparent);
+  animation: crt-spin 24s linear infinite;
+}
+@keyframes crt-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+[data-theme='crt'] .power button {
+  background:
+    repeating-linear-gradient(180deg, transparent 0 2px, rgba(0, 0, 0, 0.3) 2px 3px),
+    radial-gradient(circle at 50% 40%, #1a2552, #050918 72%);
+  border: 1px solid var(--line-2);
+  color: var(--muted);
+  box-shadow: inset 0 0 26px rgba(0, 0, 0, 0.85), inset 0 0 0 5px rgba(150, 175, 255, 0.05);
+}
+[data-theme='crt'] .power button:hover {
+  color: var(--phos);
+  filter: drop-shadow(0 0 8px color-mix(in oklab, var(--accent-1) 45%, transparent));
+}
+[data-theme='crt'] .power.on button {
+  background:
+    repeating-linear-gradient(180deg, transparent 0 2px, rgba(0, 0, 0, 0.22) 2px 3px),
+    radial-gradient(circle at 50% 42%, var(--phos), color-mix(in oklab, var(--accent-1) 70%, #000) 78%);
+  border-color: transparent;
+  color: var(--ink);
+  box-shadow: 0 0 56px -4px color-mix(in oklab, var(--accent-1) 65%, transparent);
+}
+[data-theme='crt'] .power.busy button {
+  color: var(--warn);
+}
+
+/* ── кнопки, поля, переключатели ── */
+[data-theme='crt'] .btn {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  background: rgba(4, 7, 22, 0.8);
+  border-color: var(--line-2);
+}
+[data-theme='crt'] .btn:hover:not(:disabled) {
+  background: rgba(150, 175, 255, 0.1);
+  border-color: color-mix(in oklab, var(--accent-1) 60%, transparent);
+  color: var(--phos);
+  text-shadow: var(--phos-glow);
+}
+[data-theme='crt'] .btn.primary {
+  background: var(--phos);
+  color: var(--ink);
+  border-color: transparent;
+  font-weight: 700;
+  box-shadow: 0 0 18px color-mix(in oklab, var(--accent-1) 40%, transparent);
+}
+[data-theme='crt'] .btn.primary:hover:not(:disabled) {
+  color: var(--ink);
+  text-shadow: none;
+  filter: brightness(1.1);
+}
+[data-theme='crt'] .btn.ghost {
+  background: transparent;
+  border-color: transparent;
+}
+[data-theme='crt'] .btn.danger {
+  color: var(--err);
+  border-color: color-mix(in oklab, var(--err) 40%, transparent);
+  background: color-mix(in oklab, var(--err) 10%, rgba(4, 7, 22, 0.8));
+}
+[data-theme='crt'] .btn.danger:hover:not(:disabled) {
+  color: var(--err);
+  text-shadow: 0 0 8px color-mix(in oklab, var(--err) 60%, transparent);
+}
+
+[data-theme='crt'] .input,
+[data-theme='crt'] .select,
+[data-theme='crt'] textarea.input {
+  background-color: rgba(2, 4, 12, 0.86);
+  border-color: var(--line-2);
+  caret-color: var(--phos);
+}
+[data-theme='crt'] .input:focus,
+[data-theme='crt'] .select:focus,
+[data-theme='crt'] textarea.input:focus {
+  border-color: color-mix(in oklab, var(--accent-1) 70%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent-1) 30%, transparent), 0 0 14px color-mix(in oklab, var(--accent-1) 18%, transparent);
+}
+[data-theme='crt'] .select option {
+  background: #060a1c;
+}
+
+[data-theme='crt'] .seg,
+[data-theme='crt'] .act-seg {
+  background: rgba(2, 4, 12, 0.8);
+  border-color: var(--line-2);
+  border-radius: 3px;
+}
+[data-theme='crt'] .seg button,
+[data-theme='crt'] .act-seg button {
+  border-radius: 2px;
+  font-size: 11px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+[data-theme='crt'] .chip {
+  border-radius: 2px;
+  font-size: 10.5px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+/* В узкой колонке таблицы заглавные моноширинные разрывали название сервера на две строки */
+[data-theme='crt'] .table .chip {
+  font-family: var(--font);
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+[data-theme='crt'] .ping {
+  border-radius: 2px;
+  font-size: 11px;
+}
+
+/* Переключатель — квадратный индикатор в тёмном пазу */
+[data-theme='crt'] .switch {
+  border-radius: 2px;
+  background: rgba(2, 4, 12, 0.9);
+  border-color: var(--line-2);
+}
+[data-theme='crt'] .switch i {
+  border-radius: 1px;
+  background: var(--dim);
+}
+[data-theme='crt'] .switch.on {
+  background: color-mix(in oklab, var(--accent-1) 22%, rgba(2, 4, 12, 0.9));
+  border-color: color-mix(in oklab, var(--accent-1) 65%, transparent);
+}
+[data-theme='crt'] .switch.on i {
+  background: var(--phos);
+  box-shadow: var(--phos-glow);
+}
+
+/* ── списки ── */
+[data-theme='crt'] .node.active,
+[data-theme='crt'] .preset.on {
+  border-color: color-mix(in oklab, var(--accent-1) 55%, transparent);
+  background: color-mix(in oklab, var(--accent-1) 9%, var(--panel));
+}
+[data-theme='crt'] .node .mark {
+  border-radius: 2px;
+}
+[data-theme='crt'] .node.active .mark,
+[data-theme='crt'] .preset.on .ico {
+  background: var(--phos);
+  color: var(--ink);
+  box-shadow: var(--phos-glow);
+}
+[data-theme='crt'] .preset .ico,
+[data-theme='crt'] .app-row .ico {
+  border-radius: 2px;
+}
+
+/* ── таблицы и журнал: здесь тема и правда терминал ── */
+[data-theme='crt'] .table {
+  font-size: 12px;
+}
+[data-theme='crt'] .table th {
+  background: rgba(3, 6, 18, 0.97);
+  letter-spacing: 1.2px;
+}
+[data-theme='crt'] .logs,
+[data-theme='crt'] .upd-notes {
+  background: rgba(2, 4, 12, 0.88);
+  border-color: var(--line);
+}
+[data-theme='crt'] .logs {
+  text-shadow: 0 0 6px color-mix(in oklab, currentColor 35%, transparent);
+}
+[data-theme='crt'] .logline.info .l {
+  color: var(--phos);
+}
+
+/* ── модалки и уведомления ── */
+[data-theme='crt'] .backdrop {
+  background: rgba(1, 2, 8, 0.72);
+}
+[data-theme='crt'] .modal {
+  background: rgba(4, 7, 20, 0.97);
+  border-color: var(--line-2);
+  /* Открывается как кинескоп: сначала черта по центру, потом кадр целиком */
+  animation: crt-open 0.34s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@keyframes crt-open {
+  0% {
+    clip-path: inset(50% 50% 50% 50%);
+    filter: brightness(2.4);
+  }
+  35% {
+    clip-path: inset(49.6% 0 49.6% 0);
+    filter: brightness(2);
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    filter: brightness(1);
+  }
+}
+[data-theme='crt'] .modal header,
+[data-theme='crt'] .modal footer {
+  border-color: var(--line);
+}
+[data-theme='crt'] .modal header h3 {
+  font-size: 13.5px;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  color: var(--phos);
+  text-shadow: var(--phos-glow);
+}
+[data-theme='crt'] .toast {
+  background: rgba(4, 7, 20, 0.97);
+  border-radius: 3px;
+  font-size: 12.5px;
+}
+[data-theme='crt'] .empty b {
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+[data-theme='crt'] .whatsnew li::before {
+  border-radius: 0;
+  background: var(--phos);
+  box-shadow: var(--phos-glow);
+}
+[data-theme='crt'] .whatsnew .date {
+  letter-spacing: 1.4px;
+}
+[data-theme='crt'] .upd-dot {
+  letter-spacing: 0.4px;
+}
+
+/* ── выбор темы ── */
+[data-theme='crt'] .theme-card .name {
+  font-size: 11.5px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+[data-theme='crt'] .theme-card.active {
+  border-color: color-mix(in oklab, var(--accent-1) 65%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent-1) 40%, transparent), 0 0 20px color-mix(in oklab, var(--accent-1) 22%, transparent);
+}
+[data-theme='crt'] .accent-dot,
+[data-theme='crt'] .theme-preview,
+[data-theme='crt'] .color-pick {
+  border-radius: 2px;
+}
+
+/* Кому движение мешает — только статичный кадр: без печати, мигания и вращения */
+@media (prefers-reduced-motion: reduce) {
+  [data-theme='crt'] .page-head h1,
+  [data-theme='crt'] .page-head h1::after,
+  [data-theme='crt'] .power.on .ring.r2,
+  [data-theme='crt'] .modal {
+    animation: none;
+  }
 }

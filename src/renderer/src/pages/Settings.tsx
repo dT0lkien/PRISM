@@ -21,7 +21,8 @@ import logo from '../assets/logo.png'
 import catPreview from '../assets/cats/c01.jpg'
 
 const THEMES: { id: ThemeName; label: string; hint: string }[] = [
-  { id: 'dark', label: 'Тёмная', hint: 'По умолчанию' },
+  { id: 'crt', label: 'Терминал', hint: 'По умолчанию: ЭЛТ-экран с журналом' },
+  { id: 'dark', label: 'Тёмная', hint: 'Спокойная, без эффектов' },
   { id: 'light', label: 'Светлая', hint: 'Для яркого света' },
   { id: 'aero', label: 'Aero', hint: 'В духе XP и Vista' },
   { id: 'glass', label: 'Liquid Glass', hint: 'Матовое стекло' },
@@ -63,8 +64,18 @@ const SKINS: Record<ThemeName, Skin> = {
     card: 'rgba(8,10,20,.66)',
     line: 'rgba(214,226,255,.5)',
     radius: 1
+  },
+  crt: {
+    bg: 'repeating-linear-gradient(0deg, rgba(0,0,0,.4) 0 1px, transparent 1px 3px), radial-gradient(90% 85% at 50% 45%, #1b2653, #03061a 78%)',
+    bar: 'rgba(160,185,255,.1)',
+    card: 'rgba(5,9,26,.82)',
+    line: 'rgba(160,185,255,.34)',
+    radius: 2
   }
 }
+
+/** Строки «кода» точками — как на экране темы «Терминал»: [отступ, ширина] */
+const CRT_ROWS: [number, number][] = [[0, 62], [6, 44], [6, 78], [12, 30], [0, 52]]
 
 /** Маленький макет окна — понятнее, чем название темы в списке */
 function ThemePreview({ id }: { id: ThemeName }): JSX.Element {
@@ -89,6 +100,17 @@ function ThemePreview({ id }: { id: ThemeName }): JSX.Element {
           }}
         />
       )}
+      {id === 'crt' &&
+        CRT_ROWS.map(([pad, w], i) => (
+          <span
+            key={i}
+            style={{
+              position: 'absolute', left: 44 + pad, top: 40 + i * 5, width: `${w * 0.55}%`, height: 3, zIndex: 1,
+              background: 'radial-gradient(circle, #dfe7ff 0 .8px, transparent 1.1px) 0 0 / 3px 3px',
+              filter: 'drop-shadow(0 0 2px rgba(160,185,255,.9))'
+            }}
+          />
+        ))}
       <span style={{ position: 'absolute', inset: 0, height: 11, background: skin.bar, borderBottom: `1px solid ${skin.line}` }} />
       <span
         style={{
