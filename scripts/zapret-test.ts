@@ -341,6 +341,7 @@ async function main(): Promise<void> {
     pack: unknown
     materialize: (dir: string, pack: unknown, cfg: typeof DEFAULT_ZAPRET, mode?: string) => void
     args: (pack: unknown, id: string, cfg: typeof DEFAULT_ZAPRET, dir: string) => string[]
+    userServices: (cfg: typeof DEFAULT_ZAPRET, t: { unresolved?: string[]; skipped?: number }) => Promise<{ id: string }[]>
   }
   const cfg = { ...DEFAULT_ZAPRET, ipsetMode: 'loaded' as const, lists: { ...DEFAULT_ZAPRET.lists, ipset: ['5.5.5.5'], general: ['мой.example'] } }
   internal.materialize(run, internal.pack, cfg)
@@ -355,6 +356,12 @@ async function main(): Promise<void> {
   ok('ipset по списку со своими адресами', rd('ipset-all.txt') === '1.1.1.0/24\r\n8.8.8.0/24\r\n5.5.5.5\r\n', JSON.stringify(rd('ipset-all.txt')))
   internal.materialize(run, internal.pack, cfg, 'any')
   ok('ipset any — ноль байт', rd('ipset-all.txt') === '')
+  // Свой список в hostlist остаётся в любом случае — переключатель убирает его только из теста
+  const quiet: { unresolved?: string[]; skipped?: number } = {}
+  const skippedOwn = await internal.userServices({ ...cfg, testOwnDomains: false, lists: { ...cfg.lists, general: ['localhost'] } }, quiet)
+  ok('«не проверять свои домены» — в тесте их нет', DEFAULT_ZAPRET.testOwnDomains && skippedOwn.length === 0 && !quiet.unresolved && !quiet.skipped)
+  const checkedOwn = await internal.userServices({ ...cfg, lists: { ...cfg.lists, general: ['localhost'] } }, quiet)
+  ok('по умолчанию свои домены в тесте есть', checkedOwn.map((x) => x.id).join() === 'user:localhost', checkedOwn.map((x) => x.id).join())
   const argv = internal.args(internal.pack, 'general', cfg, run)
   ok('аргументы ссылаются на рабочие списки', argv.includes(`--hostlist=${join(run, 'list-general.txt')}`))
 

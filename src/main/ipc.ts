@@ -176,6 +176,7 @@ function cleanZapret(patch: Partial<ZapretConfig>, cur: ZapretConfig): ZapretCon
     if (isStr(v) && (v === '' || pack?.fakes.includes(v))) out[k] = v
   }
   if (typeof patch.extraDomains === 'boolean') out.extraDomains = patch.extraDomains
+  if (typeof patch.testOwnDomains === 'boolean') out.testOwnDomains = patch.testOwnDomains
   if (typeof patch.autoStart === 'boolean') out.autoStart = patch.autoStart
   if (typeof patch.checkUpdates === 'boolean') out.checkUpdates = patch.checkUpdates
   const l = patch.lists

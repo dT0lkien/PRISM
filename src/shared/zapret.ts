@@ -41,6 +41,7 @@ export const DEFAULT_ZAPRET: ZapretConfig = {
   fakeDiscord: '',
   fakeGame: '',
   extraDomains: true,
+  testOwnDomains: true,
   autoStart: false,
   checkUpdates: true,
   lists: { general: [], exclude: [], ipset: [], ipsetExclude: [] }
