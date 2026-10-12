@@ -77,6 +77,7 @@ const zapretConfig = {
   fakeDiscord: '',
   fakeGame: '',
   extraDomains: true,
+  testOwnDomains: true,
   autoStart: true,
   checkUpdates: true,
   lists: { general: ['example-blocked.com', 'static.example-blocked.net', 'example-cdn.net'], exclude: [], ipset: [], ipsetExclude: [] }

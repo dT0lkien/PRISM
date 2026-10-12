@@ -30,7 +30,7 @@ import type { ZapretGameFilter, ZapretIpsetMode, ZapretLists, ZapretState } from
 import { EXTRA_DOMAINS, EXTRA_DOMAINS_NOTE, EXTRA_DOMAIN_GROUPS, ZAPRET_REPO_URL, compareVersions, strategyLabel } from '@shared/zapret'
 import { duration, plural, useStore } from '../store'
 import { Empty, Segmented, Setting, Switch } from '../ui'
-import { DiagnosticsModal, DiscordModal, HostsModal, ListModal, TestModal, type ListName } from './ZapretModals'
+import { DiagnosticsModal, DiscordModal, HostsModal, ListModal, OwnDomainsSwitch, TestModal, type ListName } from './ZapretModals'
 
 const GAME_OPTIONS: { value: ZapretGameFilter; label: string }[] = [
   { value: 'off', label: 'Выкл' },
@@ -56,7 +56,7 @@ const LIST_TABS: { value: keyof ZapretLists; label: string; kind: 'domain' | 'ip
     value: 'general',
     label: 'Свои домены',
     kind: 'domain',
-    hint: 'Домены, которые надо обходить. Поддомены учитываются сами. «Найти рабочую» проверяет стратегии и на них.',
+    hint: 'Домены, которые надо обходить. Поддомены учитываются сами.',
     placeholder: 'example.com\nstatic.example.net'
   },
   {
@@ -686,6 +686,11 @@ function ListsCard({ onView }: { onView: (n: ListName) => void }): JSX.Element {
           Сохранить
         </button>
       </div>
+      {tab === 'general' && lists.general.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <OwnDomainsSwitch />
+        </div>
+      )}
 
       <div className="divider" style={{ margin: '16px 0 12px' }} />
       <div className="row wrap" style={{ gap: 7 }}>

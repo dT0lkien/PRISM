@@ -40,9 +40,9 @@ import type {
   ZapretStrategyResult,
   ZapretTestKind
 } from '@shared/types'
-import { TEST_USER_LIMIT, isUserService, serviceName, serviceScore, strategyLabel } from '@shared/zapret'
+import { TEST_USER_LIMIT, isUserService, serviceName, serviceScore, strategyLabel, userTestDomains } from '@shared/zapret'
 import { plural, useStore } from '../store'
-import { Modal, Segmented } from '../ui'
+import { Modal, Segmented, Switch } from '../ui'
 
 export type ListName = 'general' | 'google' | 'exclude' | 'ipsetExclude' | 'ipset' | 'extra'
 
@@ -288,6 +288,32 @@ function Dot({ s }: { s: ZapretServiceResult }): JSX.Element {
   return <i className="zap-dot" style={{ background: color }} title={`${serviceName(s.id)}: ${STATUS_TEXT[s.status]}${s.error && s.status !== 'ok' ? ` — ${s.error}` : ''}`} />
 }
 
+/**
+ * «Свои домены в тесте» — один переключатель и в списках, и в окне теста.
+ * Каждый домен открывается с каждой стратегией, и со списком в сотни строк
+ * тест идёт заметно дольше. Пока своих доменов нет, показывать нечего.
+ */
+export function OwnDomainsSwitch(): JSX.Element | null {
+  const cfg = useStore((s) => s.snap.zapret)
+  const patchZapret = useStore((s) => s.patchZapret)
+  const n = useMemo(() => userTestDomains(cfg.lists.general).length, [cfg.lists.general])
+  if (!n) return null
+  const count = `${n} ${plural(n, 'домен', 'домена', 'доменов')}`
+  return (
+    <div className="row" style={{ gap: 11 }}>
+      <Switch on={cfg.testOwnDomains} onChange={(v) => patchZapret({ testOwnDomains: v })} />
+      <div className="grow col" style={{ gap: 1 }}>
+        <span style={{ fontSize: 13 }}>Проверять свои домены в тесте стратегий</span>
+        <span className="dim" style={{ fontSize: 12, lineHeight: 1.45 }}>
+          {cfg.testOwnDomains
+            ? `${count}${n > TEST_USER_LIMIT ? `, в тест идут первые ${TEST_USER_LIMIT}` : ''}: каждый открывается с каждой стратегией. Долго — выключите, тест пойдёт только по сервисам.`
+            : `Тест идёт только по сервисам — YouTube, Discord и остальным. Ваши ${count} в нём не участвуют, но обходятся как обычно.`}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 /** Что Prism выключил на время теста — в винительном падеже, для «выключил …» и «включаю обратно …» */
 const PAUSED_NAME = { vpn: 'VPN', service: 'службу zapret', zapret: 'обход' } as const
 
@@ -389,6 +415,7 @@ export function TestModal({ open, onClose }: { open: boolean; onClose: () => voi
             ? 'То же, что по кнопке «Тест», но можно выбрать стратегии — например, перепроверить две-три лучшие.'
             : 'Для опытных: проверка «заморозки» после 16–20 КБ на серверах разных хостингов из набора hyperion-cs/dpi-checkers. На время теста IPSet переключается на «любой IP». Идёт заметно дольше.'}
         </p>
+        {kind === 'standard' && <OwnDomainsSwitch />}
         <div className="col" style={{ gap: 8 }}>
           <div className="row" style={{ gap: 8 }}>
             <b style={{ fontSize: 13 }}>Стратегии</b>
@@ -625,6 +652,9 @@ export function TestModal({ open, onClose }: { open: boolean; onClose: () => voi
                 <span className="grow">
                   Своих доменов больше {TEST_USER_LIMIT} — проверены первые {TEST_USER_LIMIT}, ещё {test.skipped} в тест не вошли.
                 </span>
+                <button className="btn sm" disabled={busy} onClick={() => patchZapret({ testOwnDomains: false }).then(() => run())}>
+                  Проверить без своих
+                </button>
               </div>
             )}
             {needExtra && (
@@ -636,6 +666,8 @@ export function TestModal({ open, onClose }: { open: boolean; onClose: () => voi
                 </button>
               </div>
             )}
+
+            <OwnDomainsSwitch />
 
             {rows.length > 0 && (
               <>

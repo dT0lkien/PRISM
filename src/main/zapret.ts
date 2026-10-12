@@ -1150,6 +1150,7 @@ export class Zapret extends EventEmitter {
    * прямо, а не показало «не открывается» со всеми стратегиями подряд.
    */
   private async userServices(cfg: ZapretConfig, t: ZapretTestProgress): Promise<TestService[]> {
+    if (!cfg.testOwnDomains) return []
     const all = userTestDomains(cfg.lists.general)
     const domains = all.slice(0, TEST_USER_LIMIT)
     if (all.length > domains.length) t.skipped = all.length - domains.length
