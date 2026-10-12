@@ -5,6 +5,8 @@
 
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -29,8 +31,13 @@ import {
   removeHostsBlock,
   strategyLabel,
   summarizeStrategy,
-  toCommandLine
+  toCommandLine,
+  isUserService,
+  serviceName,
+  userService,
+  userTestDomains
 } from '../src/shared/zapret'
+import { loadCheck, siteHost } from '../src/main/zapret-net'
 import { unzip } from '../src/main/unzip'
 import { store } from '../src/main/store'
 import { zapret, zapretPaths } from '../src/main/zapret'
@@ -217,6 +224,55 @@ async function main(): Promise<void> {
   ok('не открылось ничего — лучшей нет', pickBest([withServices('general (Z)', [sv('youtube', 0, 3)])]) === undefined)
   const report = formatServicesReport([sv('youtube', 0, 3)], [b], 'general (B)')
   ok('отчёт: без обхода, лучшая и подробности', report.includes('Без обхода: YouTube — нет') && report.includes('Лучшая стратегия: B') && report.includes('discord-2: нет — таймаут'))
+
+  console.log('\n▸ Свои домены в тесте')
+  const mine = userTestDomains(['rutracker.org', '^точно.рф', 'rutracker.org', '^rutracker.org', '.sub.example.net.', '10.0.0.1', '^'])
+  ok('из своего списка — имена без повторов, `^` и IP', mine.map((d) => d.domain).join() === 'rutracker.org,точно.рф,sub.example.net', mine.map((d) => d.domain).join())
+  ok('запись с `^` помнит, что поддомены не покрыты', mine.find((d) => d.domain === 'точно.рф')?.exact === true && mine.find((d) => d.domain === 'rutracker.org')?.exact === false)
+  const own = userService('rutracker.org', 'www.rutracker.org')
+  ok('свой домен — отдельный сервис под своим именем', isUserService(own.id) && !isUserService('youtube') && serviceName(own.id) === 'rutracker.org' && serviceName('youtube') === 'YouTube')
+  ok('проверяется загрузкой с переходом по переадресации', own.checks.length === 1 && own.checks[0].kind === 'load' && own.checks[0].url === 'https://www.rutracker.org/' && own.checks[0].redirects === 3)
+  // Обе стратегии открывают YouTube и Discord, свой домен — только вторая
+  const noMine = withServices('general (N)', [sv('youtube', 3, 3, 100), sv('discord', 3, 3, 100), sv(own.id, 0, 1)])
+  const withMine = withServices('general (M)', [sv('youtube', 3, 3, 900), sv('discord', 3, 3, 900), sv(own.id, 1, 1)])
+  ok('лучшая — та, с которой открылся свой домен', pickBest([noMine, withMine]) === 'general (M)', pickBest([noMine, withMine]))
+  const ownReport = formatServicesReport([sv(own.id, 0, 1)], [withMine], 'general (M)', { unresolved: ['нет.example'], skipped: 7 })
+  ok(
+    'отчёт: свой домен по имени, пропущенные — отдельно',
+    ownReport.includes('Без обхода: rutracker.org — нет') && ownReport.includes('без адреса, не проверялись: нет.example') && ownReport.includes('не проверялись: 7')
+  )
+
+  /* Сайт, который с «/» отправляет дальше, а сама страница «замерзает» —
+     ровно тот случай, ради которого проверка идёт по переадресации */
+  const big = Buffer.alloc(50 * 1024, 'x')
+  const web = createServer((req, res) => {
+    const to = (location: string): void => void res.writeHead(302, { location }).end()
+    if (req.url === '/') to('/page')
+    else if (req.url === '/page') res.end(big)
+    else if (req.url === '/frozen') to('/hang')
+    else if (req.url === '/away') to(`http://localhost:${(web.address() as AddressInfo).port}/hang`)
+    else if (req.url === '/loop') to('/loop')
+    else if (req.url === '/junk') to('mailto:nobody@example.com')
+    else res.write(Buffer.alloc(2048, 'x')) // /hang: два килобайта и тишина
+  })
+  await new Promise<void>((r) => web.listen(0, '127.0.0.1', r))
+  const at = `http://127.0.0.1:${(web.address() as AddressInfo).port}`
+  // Запас по времени — на медленную машину в CI: на «замёрзших» страницах проверка ждёт его целиком
+  const follow = { redirects: 3, timeoutMs: 1500 }
+  const page = await loadCheck(`${at}/`, follow)
+  ok('переадресация пройдена, страница загружена', page.ok, page.error)
+  const frozen = await loadCheck(`${at}/frozen`, follow)
+  ok('страница за переадресацией замерзла — не открывается', !frozen.ok && frozen.error === 'застряло на 2 КБ', frozen.error)
+  ok('без переходов та же ссылка считалась бы рабочей', (await loadCheck(`${at}/frozen`, { timeoutMs: follow.timeoutMs })).ok)
+  const away = await loadCheck(`${at}/away`, follow)
+  // Чем именно кончится — зависит от того, каким адресом система считает localhost; важно, что имя названо
+  ok('споткнулись на другом имени — оно названо', !away.ok && !!away.error?.startsWith('localhost: '), away.error)
+  ok('бесконечная переадресация не зацикливает', (await loadCheck(`${at}/loop`, follow)).ok)
+  ok('переадресация не на сайт — ответ как есть', (await loadCheck(`${at}/junk`, follow)).ok)
+  web.closeAllConnections()
+  web.close()
+  ok('адрес домена находится', (await siteHost('localhost')) === 'localhost')
+  ok('нет адреса ни у домена, ни у www — проверять нечего', (await siteHost('prism-no-such-site.invalid')) === undefined)
 
   /* ─────────────────────────── установка сборки ─────────────────────────── */
 

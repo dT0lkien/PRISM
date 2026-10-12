@@ -9,6 +9,8 @@
 import http from 'node:http'
 import https from 'node:https'
 import { connect } from 'node:net'
+import { lookup } from 'node:dns/promises'
+import { domainToASCII } from 'node:url'
 import { randomBytes } from 'node:crypto'
 import type { ZapretCheckStatus } from '@shared/types'
 
@@ -67,32 +69,21 @@ export interface LoadResult {
  * Открывает страницу по-настоящему: читает ответ, пока не придёт minBytes
  * или он не кончится. Код ответа не важен — 404 от сервера тоже значит, что
  * до него дошли. Не важен и объём, если страница маленькая и дочиталась.
+ *
+ * redirects — сколько переадресаций пройти следом. Без этого сайт, который с
+ * «/» отправляет на www или на страницу входа, считался бы открывшимся по
+ * одному короткому ответу, и «заморозку» на самой странице тест бы не увидел.
+ * Время общее на всю цепочку.
  */
-export function loadCheck(url: string, timeoutMs = 6000, minBytes = 40 * 1024): Promise<LoadResult> {
+export function loadCheck(url: string, opts: { timeoutMs?: number; minBytes?: number; redirects?: number } = {}): Promise<LoadResult> {
+  const { timeoutMs = 6000, minBytes = 40 * 1024, redirects = 0 } = opts
   return new Promise((resolve) => {
     const t0 = Date.now()
+    const first = hostOf(url)
+    let host = first
     let got = 0
     let done = false
-    const mod = url.startsWith('https:') ? https : http
-    const req = mod.get(
-      url,
-      {
-        agent: false,
-        headers: {
-          'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36',
-          accept: '*/*',
-          'accept-encoding': 'identity'
-        }
-      },
-      (res) => {
-        res.on('data', (c: Buffer) => {
-          got += c.length
-          if (got >= minBytes) finish(true)
-        })
-        res.on('end', () => finish(true))
-        res.on('error', (e) => finish(false, reason(e)))
-      }
-    )
+    let req: http.ClientRequest | undefined
     const timer = setTimeout(
       () => finish(false, got > 0 ? `застряло на ${Math.round(got / 1024)} КБ` : 'таймаут'),
       timeoutMs
@@ -101,12 +92,94 @@ export function loadCheck(url: string, timeoutMs = 6000, minBytes = 40 * 1024): 
       if (done) return
       done = true
       clearTimeout(timer)
-      req.destroy()
-      resolve({ ok, ms: Date.now() - t0, error: ok ? undefined : error })
+      req?.destroy()
+      // Споткнулись уже после переадресации — называем, на каком имени: в список, возможно, надо дописать его
+      resolve({ ok, ms: Date.now() - t0, error: ok ? undefined : host === first ? error : `${host}: ${error}` })
     }
-    connectTimeout(req, Math.min(3000, timeoutMs), () => finish(false, 'нет соединения'))
-    req.on('error', (e: NodeJS.ErrnoException) => finish(false, reason(e)))
+    const open = (target: string, left: number): void => {
+      let moved = false
+      const r = (target.startsWith('https:') ? https : http).get(
+        target,
+        {
+          agent: false,
+          headers: {
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36',
+            accept: '*/*',
+            'accept-encoding': 'identity'
+          }
+        },
+        (res) => {
+          const next = left > 0 && res.statusCode && res.statusCode >= 300 && res.statusCode < 400 ? nextUrl(res.headers.location, target) : undefined
+          if (next && !done) {
+            // Обрываем ответ, не дочитав: его ошибку «aborted» ловим здесь, чтобы она не стала провалом проверки
+            moved = true
+            res.on('error', () => {})
+            r.destroy()
+            host = hostOf(next)
+            open(next, left - 1)
+            return
+          }
+          res.on('data', (c: Buffer) => {
+            got += c.length
+            if (got >= minBytes) finish(true)
+          })
+          res.on('end', () => finish(true))
+          res.on('error', (e) => finish(false, reason(e)))
+        }
+      )
+      req = r
+      connectTimeout(r, Math.min(3000, timeoutMs), () => {
+        if (!moved) finish(false, 'нет соединения')
+      })
+      r.on('error', (e: NodeJS.ErrnoException) => {
+        if (!moved) finish(false, reason(e))
+      })
+    }
+    open(url, redirects)
   })
+}
+
+const hostOf = (url: string): string => {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return url
+  }
+}
+
+/** Куда ведёт Location; не http(s) или мусор — переадресации нет, ответ считается как есть */
+function nextUrl(location: string | undefined, from: string): string | undefined {
+  if (!location) return undefined
+  try {
+    const u = new URL(location, from)
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Имя, по которому открывать свой домен пользователя: он сам или с www.
+ * В список пишут и «example.com», и домен, у которого сайт живёт только на
+ * www. Адреса нет ни там, ни там — undefined: проверять нечего, а обход DNS
+ * не чинит. Смотрим тем же системным поиском, каким пойдёт сама проверка.
+ */
+export async function siteHost(domain: string, www = true, timeoutMs = 4000): Promise<string | undefined> {
+  const name = domainToASCII(domain)
+  if (!name) return undefined
+  for (const host of www ? [name, `www.${name}`] : [name]) {
+    const found = await new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => resolve(false), timeoutMs)
+      lookup(host)
+        .then(
+          () => resolve(true),
+          () => resolve(false)
+        )
+        .finally(() => clearTimeout(timer))
+    })
+    if (found) return host
+  }
+  return undefined
 }
 
 /** Установится ли TCP-соединение — так проверяется приложение Telegram */

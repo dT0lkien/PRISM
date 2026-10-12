@@ -415,6 +415,10 @@ export interface ZapretTestProgress {
   startedAt?: number
   /** Что открывается без обхода — с этим сравниваются стратегии */
   baseline?: ZapretServiceResult[]
+  /** Свои домены, у которых не нашлось адреса: проверять нечего, и обход тут не поможет */
+  unresolved?: string[]
+  /** Сколько своих доменов в проверку не вошло — берутся первые TEST_USER_LIMIT */
+  skipped?: number
   /** Что Prism приостановил на время теста и вернёт после */
   paused?: ('vpn' | 'service' | 'zapret')[]
   total: number

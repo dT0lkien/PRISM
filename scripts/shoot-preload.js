@@ -79,7 +79,7 @@ const zapretConfig = {
   extraDomains: true,
   autoStart: true,
   checkUpdates: true,
-  lists: { general: ['example-blocked.com', 'static.example-blocked.net'], exclude: [], ipset: [], ipsetExclude: [] }
+  lists: { general: ['example-blocked.com', 'static.example-blocked.net', 'example-cdn.net'], exclude: [], ipset: [], ipsetExclude: [] }
 }
 
 const snapshot = {
@@ -237,9 +237,11 @@ const svc = (id, ok, total, ms = 320, error = 'таймаут') => ({
   id, ok, total, ms: ok ? ms : undefined,
   status: ok === 0 ? 'fail' : ok === total || id === 'telegram-app' ? 'ok' : 'partial',
   error: ok < total ? error : undefined,
-  checks: Array.from({ length: total }, (_, i) => ({ target: `${id}.example/${i}`, ok: i < ok, ms: i < ok ? ms : undefined, error: i < ok ? undefined : error }))
+  checks: Array.from({ length: total }, (_, i) => ({ target: id.startsWith('user:') ? id.slice(5) : `${id}.example/${i}`, ok: i < ok, ms: i < ok ? ms : undefined, error: i < ok ? undefined : error }))
 })
-const baseline = [svc('youtube', 1, 3), svc('discord', 0, 3), svc('telegram-web', 1, 3), svc('telegram-app', 0, 3, 0, 'нет соединения'), svc('spotify', 1, 2, 300, 'сброс соединения'), svc('cloudflare', 2, 2)]
+/* Свои домены из zapretConfig.lists.general — в тесте каждый идёт отдельной строкой; у третьего «не нашлось адреса» */
+const own = (ok1, ok2) => [svc('user:example-blocked.com', ok1, 1, 260), svc('user:static.example-blocked.net', ok2, 1, 310, 'сброс соединения')]
+const baseline = [svc('youtube', 1, 3), svc('discord', 0, 3), svc('telegram-web', 1, 3), svc('telegram-app', 0, 3, 0, 'нет соединения'), svc('spotify', 1, 2, 300, 'сброс соединения'), svc('cloudflare', 2, 2), ...own(0, 0)]
 const strat = (id, list, started = true) => ({ strategy: id, started, ok: 0, error: 0, unsup: 0, blocked: 0, pingOk: 0, pingFail: 0, targets: [], services: started ? list : undefined })
 const zapretTest = {
   running: process.env.PRISM_TEST_RUNNING === '1',
@@ -248,14 +250,15 @@ const zapretTest = {
   startedAt: Date.now() - 64_000,
   paused: process.env.PRISM_TEST_RUNNING === '1' ? ['vpn'] : [],
   baseline,
+  unresolved: ['example-cdn.net'],
   total: 22,
   done: process.env.PRISM_TEST_RUNNING === '1' ? 7 : 22,
   current: 'general (ALT7)',
   best: 'general (ALT)',
   results: [
-    strat('general (ALT)', [svc('youtube', 3, 3, 410), svc('discord', 3, 3, 280), svc('telegram-web', 3, 3, 190), svc('telegram-app', 0, 3, 0, 'нет соединения'), svc('spotify', 2, 2, 230), svc('cloudflare', 2, 2, 350)]),
-    strat('general (ALT9)', [svc('youtube', 3, 3, 520), svc('discord', 3, 3), svc('telegram-web', 2, 3), svc('telegram-app', 0, 3, 0, 'нет соединения'), svc('spotify', 2, 2), svc('cloudflare', 2, 2)]),
-    strat('general', [svc('youtube', 2, 3, 600, 'застряло на 16 КБ'), svc('discord', 1, 3), svc('telegram-web', 1, 3), svc('telegram-app', 0, 3, 0, 'нет соединения'), svc('spotify', 1, 2), svc('cloudflare', 2, 2)]),
+    strat('general (ALT)', [svc('youtube', 3, 3, 410), svc('discord', 3, 3, 280), svc('telegram-web', 3, 3, 190), svc('telegram-app', 0, 3, 0, 'нет соединения'), svc('spotify', 2, 2, 230), svc('cloudflare', 2, 2, 350), ...own(1, 1)]),
+    strat('general (ALT9)', [svc('youtube', 3, 3, 520), svc('discord', 3, 3), svc('telegram-web', 2, 3), svc('telegram-app', 0, 3, 0, 'нет соединения'), svc('spotify', 2, 2), svc('cloudflare', 2, 2), ...own(1, 0)]),
+    strat('general', [svc('youtube', 2, 3, 600, 'застряло на 16 КБ'), svc('discord', 1, 3), svc('telegram-web', 1, 3), svc('telegram-app', 0, 3, 0, 'нет соединения'), svc('spotify', 1, 2), svc('cloudflare', 2, 2), ...own(0, 0)]),
     strat('general (ALT5)', [], false)
   ],
   file: 'C:\\test_results.txt',
