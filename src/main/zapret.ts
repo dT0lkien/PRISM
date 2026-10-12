@@ -57,6 +57,8 @@ import {
   compareVersions,
   expandStrategy,
   TEST_SERVICES,
+  TEST_USER_LIMIT,
+  type TestService,
   checkLabel,
   formatReport,
   formatServicesReport,
@@ -68,12 +70,14 @@ import {
   serviceStatus,
   strategyLabel,
   summarizeStrategy,
-  toCommandLine
+  toCommandLine,
+  userService,
+  userTestDomains
 } from '@shared/zapret'
 import { store } from './store'
 import { IS_WIN, PS_UTF8, isElevated, psUtf8 } from './win'
 import { unzip } from './unzip'
-import { CHECKS, dpiCheck, fetchBuffer, loadCheck, pool, tcpCheck } from './zapret-net'
+import { CHECKS, dpiCheck, fetchBuffer, loadCheck, pool, siteHost, tcpCheck } from './zapret-net'
 import { downloadIpset, enableTcpTimestamps } from './zapret-tools'
 
 const exec = promisify(execFile)
@@ -1044,6 +1048,7 @@ export class Zapret extends EventEmitter {
   ): Promise<void> {
     const t = this.test!
     const cfg = store.get().zapret
+    let services = TEST_SERVICES
     try {
       await ensureRoot()
       await enableTcpTimestamps()
@@ -1052,7 +1057,8 @@ export class Zapret extends EventEmitter {
         // Сначала — что открывается без обхода. Не открылся даже ya.ru — дальше мерить нечего
         const control = await loadCheck(CONTROL_URL)
         if (!control.ok) throw new Error(`Нет интернета: не открывается даже ya.ru (${control.error}). Проверьте подключение и запустите тест снова`)
-        t.baseline = await this.serviceChecks()
+        services = [...TEST_SERVICES, ...(await this.userServices(cfg, t))]
+        t.baseline = await this.serviceChecks(services)
         t.phase = 'strategies'
         this.emitTest()
       }
@@ -1072,7 +1078,7 @@ export class Zapret extends EventEmitter {
         if (await this.waitAlive(p, 1200)) {
           r.started = true
           if (kind === 'standard') {
-            r.services = await this.serviceChecks()
+            r.services = await this.serviceChecks(services)
             for (const sv of r.services) {
               r.ok += sv.ok
               r.error += sv.total - sv.ok
@@ -1105,7 +1111,7 @@ export class Zapret extends EventEmitter {
         const p2 = (n: number): string => String(n).padStart(2, '0')
         const stamp = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}_${p2(d.getHours())}-${p2(d.getMinutes())}-${p2(d.getSeconds())}`
         t.file = join(zapretPaths.reports, `test_results_${stamp}.txt`)
-        const report = kind === 'standard' ? formatServicesReport(t.baseline, t.results, t.best) : formatReport(kind, t.results, t.best)
+        const report = kind === 'standard' ? formatServicesReport(t.baseline, t.results, t.best, t) : formatReport(kind, t.results, t.best)
         writeFileSync(t.file, report, 'utf8')
 
         const summary: ZapretTestSummary = { kind, at: Date.now(), best: t.best, scores: {} }
@@ -1138,11 +1144,28 @@ export class Zapret extends EventEmitter {
     }
   }
 
-  /** Все сервисы из TEST_SERVICES разом: проверки параллельно, итог — по сервисам */
-  private async serviceChecks(): Promise<ZapretServiceResult[]> {
-    const jobs = TEST_SERVICES.flatMap((sv) => sv.checks.map((c) => ({ sv, c })))
-    const res = await pool(jobs, 16, ({ c }) => (c.kind === 'tcp' ? tcpCheck(c.host, c.port) : loadCheck(c.url)))
-    return TEST_SERVICES.map((sv) => {
+  /**
+   * Свои домены пользователя — сервисами теста, каждый отдельно. Что из них
+   * проверить нельзя, записывается в ход теста, чтобы окно сказало об этом
+   * прямо, а не показало «не открывается» со всеми стратегиями подряд.
+   */
+  private async userServices(cfg: ZapretConfig, t: ZapretTestProgress): Promise<TestService[]> {
+    const all = userTestDomains(cfg.lists.general)
+    const domains = all.slice(0, TEST_USER_LIMIT)
+    if (all.length > domains.length) t.skipped = all.length - domains.length
+    // Запись с `^` поддомены не покрывает — искать сайт на www для неё незачем
+    const hosts = await pool(domains, 8, (d) => siteHost(d.domain, !d.exact))
+    const unresolved = domains.filter((_, i) => !hosts[i]).map((d) => d.domain)
+    if (unresolved.length) t.unresolved = unresolved
+    return domains.flatMap((d, i) => (hosts[i] ? [userService(d.domain, hosts[i])] : []))
+  }
+
+  /** Все сервисы разом: проверки параллельно, итог — по сервисам */
+  private async serviceChecks(services: TestService[]): Promise<ZapretServiceResult[]> {
+    const jobs = services.flatMap((sv) => sv.checks.map((c) => ({ sv, c })))
+    // Встроенных проверок 16, и они идут все разом; со своими доменами — вдвое шире, чтобы круг не затягивался
+    const res = await pool(jobs, 32, ({ c }) => (c.kind === 'tcp' ? tcpCheck(c.host, c.port) : loadCheck(c.url, { redirects: c.redirects })))
+    return services.map((sv) => {
       const mine = jobs.map((j, i) => ({ j, r: res[i] })).filter((x) => x.j.sv === sv)
       const checks = mine.map(({ j, r }) => ({ target: checkLabel(j.c), ok: r.ok, ms: r.ok ? r.ms : undefined, error: r.error }))
       const good = checks.filter((c) => c.ok)

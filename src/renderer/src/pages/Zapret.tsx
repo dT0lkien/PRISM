@@ -56,7 +56,7 @@ const LIST_TABS: { value: keyof ZapretLists; label: string; kind: 'domain' | 'ip
     value: 'general',
     label: 'Свои домены',
     kind: 'domain',
-    hint: 'Домены, которые надо обходить. Поддомены учитываются сами.',
+    hint: 'Домены, которые надо обходить. Поддомены учитываются сами. «Найти рабочую» проверяет стратегии и на них.',
     placeholder: 'example.com\nstatic.example.net'
   },
   {
@@ -400,7 +400,8 @@ function Installed(): JSX.Element {
           Ищет частые причины, по которым обход не работает: конфликтующие программы, VPN, выключенные службы, DNS.
         </Tool>
         <Tool icon={<Gauge size={16} />} title="Тест доступности" onClick={() => setModal('test')}>
-          Одна кнопка: Prism переберёт все стратегии на YouTube, Discord, Telegram, Spotify и сайтах за Cloudflare и включит лучшую.
+          Одна кнопка: Prism переберёт все стратегии на YouTube, Discord, Telegram, Spotify, сайтах за Cloudflare и ваших доменах и
+          включит лучшую.
         </Tool>
         <Tool icon={<FileText size={16} />} title="Файл hosts" onClick={() => setModal('hosts')}>
           Чинит веб-версию Telegram и бесконечное «Подключение» к голосовому чату Discord.

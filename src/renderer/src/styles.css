@@ -1933,6 +1933,12 @@ textarea.input {
 .table tr.zap-row.best td {
   background: color-mix(in oklab, var(--ok) 8%, transparent);
 }
+/* Таблицы теста: у карточки с overflow: hidden минимальная высота нулевая, и
+   в прокручиваемой колонке окна она сжималась бы, обрезая строки, — а их со
+   своими доменами бывает много. Пусть прокручивается окно */
+.modal .content > .card {
+  flex-shrink: 0;
+}
 
 /* ═══ Liquid Glass — толстое матовое стекло с бликом по кромке ═══ */
 [data-theme='glass'] {

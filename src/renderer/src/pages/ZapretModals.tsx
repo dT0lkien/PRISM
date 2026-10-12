@@ -14,6 +14,7 @@ import {
   FileText,
   FolderOpen,
   Gauge,
+  Globe,
   List,
   MessageCircle,
   Music,
@@ -39,7 +40,7 @@ import type {
   ZapretStrategyResult,
   ZapretTestKind
 } from '@shared/types'
-import { serviceName, serviceScore, strategyLabel } from '@shared/zapret'
+import { TEST_USER_LIMIT, isUserService, serviceName, serviceScore, strategyLabel } from '@shared/zapret'
 import { plural, useStore } from '../store'
 import { Modal, Segmented } from '../ui'
 
@@ -264,6 +265,8 @@ const CHECK_CLS: Record<ZapretCheckStatus, string> = {
   fail: 'err'
 }
 
+/** Своих доменов бывают десятки — в строку вывода идут первые, остальные числом */
+const shortList = (l: string[], max = 6): string => l.slice(0, max).join(', ') + (l.length > max ? ` и ещё ${l.length - max}` : '')
 const sec = (ms?: number): string => (ms === undefined ? '' : `${(ms / 1000).toFixed(1).replace('.', ',')} с`)
 const okCount = (r: ZapretStrategyResult): number => r.services?.filter((s) => s.status === 'ok').length ?? 0
 const rank = (r: ZapretStrategyResult): number =>
@@ -526,7 +529,13 @@ export function TestModal({ open, onClose }: { open: boolean; onClose: () => voi
     const failing = services && best ? best.services!.filter((s) => s.status !== 'ok') : []
     const appBlocked = failing.some((s) => s.id === 'telegram-app') && base.find((b) => b.id === 'telegram-app')?.status === 'fail'
     const needExtra = !cfg.extraDomains && failing.some((s) => s.id === 'telegram-web' || s.id === 'spotify')
-    const names = (l: ZapretServiceResult[]): string => l.map((s) => serviceName(s.id)).join(', ')
+    const names = (l: ZapretServiceResult[]): string => shortList(l.map((s) => serviceName(s.id)))
+    // Свой домен, который не открылся ни без обхода, ни с одной из стратегий: дело не в выборе стратегии
+    const tried = test.results.filter((r) => r.started && r.services)
+    const dead =
+      services && tried.length
+        ? base.filter((b) => isUserService(b.id) && b.status === 'fail' && tried.every((r) => r.services!.find((s) => s.id === b.id)?.status === 'fail'))
+        : []
 
     body = (
       <>
@@ -591,6 +600,33 @@ export function TestModal({ open, onClose }: { open: boolean; onClose: () => voi
                 </button>
               </div>
             )}
+            {!!test.unresolved?.length && (
+              <div className="upd-notes zap-note warn">
+                <Globe size={16} />
+                <span className="grow">
+                  Из своих доменов не проверить: {shortList(test.unresolved)}. По самому имени адрес не находится: либо сайт живёт только на
+                  поддоменах — так устроены домены, с которых грузятся картинки и видео, — либо имя записано с ошибкой. Обходу это не мешает:
+                  домен остаётся в списке.
+                </span>
+              </div>
+            )}
+            {dead.length > 0 && (
+              <div className="upd-notes zap-note warn">
+                <Globe size={16} />
+                <span className="grow">
+                  Ни с одной стратегией не {dead.length === 1 ? 'открылся' : 'открылись'}: {names(dead)}. Похоже, дело не в стратегии: по самому
+                  адресу может не быть сайта, или он закрыт по IP — тогда обход бессилен и нужен VPN.
+                </span>
+              </div>
+            )}
+            {!!test.skipped && (
+              <div className="upd-notes zap-note">
+                <List size={16} />
+                <span className="grow">
+                  Своих доменов больше {TEST_USER_LIMIT} — проверены первые {TEST_USER_LIMIT}, ещё {test.skipped} в тест не вошли.
+                </span>
+              </div>
+            )}
             {needExtra && (
               <div className="upd-notes zap-note warn">
                 <AlertTriangle size={16} />
@@ -619,7 +655,7 @@ export function TestModal({ open, onClose }: { open: boolean; onClose: () => voi
                               </td>
                               <td>
                                 {r.started ? (
-                                  <span className="row" style={{ gap: 5 }}>
+                                  <span className="row wrap" style={{ gap: 5 }}>
                                     {r.services?.map((s) => <Dot key={s.id} s={s} />)}
                                   </span>
                                 ) : (
@@ -708,7 +744,10 @@ export function TestModal({ open, onClose }: { open: boolean; onClose: () => voi
   )
 }
 
-/** Сервисы: как было без обхода и как стало со стратегией */
+/** Столько своих доменов таблица показывает целиком, не сворачивая благополучные */
+const USER_ROWS = 8
+
+/** Сервисы и свои домены: как было без обхода и как стало со стратегией */
 function ServiceTable({
   baseline,
   withLabel,
@@ -720,6 +759,13 @@ function ServiceTable({
   withServices?: ZapretServiceResult[]
   compact?: boolean
 }): JSX.Element {
+  const withOf = (id: string): ZapretServiceResult | undefined => withServices?.find((s) => s.id === id)
+  /* Своих доменов может быть сотня. Когда их много, строкой идут только те,
+     с которыми что-то не так, — остальные сворачиваются в одну */
+  const user = baseline.filter((b) => isUserService(b.id))
+  const calm = new Set(
+    user.length > USER_ROWS ? user.filter((b) => b.status === 'ok' && (withOf(b.id)?.status ?? 'ok') === 'ok').map((b) => b.id) : []
+  )
   return (
     <div className="card" style={{ overflow: 'hidden' }}>
       <table className="table">
@@ -732,7 +778,8 @@ function ServiceTable({
         </thead>
         <tbody>
           {baseline.map((b) => {
-            const Icon = SERVICE_ICON[b.id] ?? Cloud
+            if (calm.has(b.id)) return null
+            const Icon = SERVICE_ICON[b.id] ?? (isUserService(b.id) ? Globe : Cloud)
             return (
               <tr key={b.id}>
                 <td>
@@ -745,11 +792,18 @@ function ServiceTable({
                   <StatusChip s={b} compact />
                 </td>
                 <td>
-                  <StatusChip s={withServices?.find((s) => s.id === b.id)} compact={compact} />
+                  <StatusChip s={withOf(b.id)} compact={compact} />
                 </td>
               </tr>
             )
           })}
+          {calm.size > 0 && (
+            <tr>
+              <td colSpan={3} className="dim" style={{ fontSize: 12 }}>
+                Ещё {calm.size} {plural(calm.size, 'свой домен открывается', 'своих домена открываются', 'своих доменов открываются')} и без обхода
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>

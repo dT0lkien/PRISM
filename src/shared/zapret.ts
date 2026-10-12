@@ -13,7 +13,8 @@ import type {
   ZapretServiceResult,
   ZapretServiceStatus,
   ZapretStrategyResult,
-  ZapretTestKind
+  ZapretTestKind,
+  ZapretTestProgress
 } from './types'
 
 export const ZAPRET_REPO = 'Flowseal/zapret-discord-youtube'
@@ -381,7 +382,8 @@ export function removeHostsBlock(current: string): string {
 
 /* ─────────────────────────── проверка доступности ─────────────────────────── */
 
-export type ServiceCheck = { kind: 'load'; url: string } | { kind: 'tcp'; host: string; port: number }
+/** redirects — сколько переадресаций пройти следом: у своих доменов за «/» часто стоит только она */
+export type ServiceCheck = { kind: 'load'; url: string; redirects?: number } | { kind: 'tcp'; host: string; port: number }
 
 export interface TestService {
   id: string
@@ -440,7 +442,42 @@ export const TEST_SERVICES: TestService[] = [
 /** Сайт, который обход не трогает: не открылся и он — значит, нет интернета вообще */
 export const CONTROL_URL = 'https://ya.ru/'
 
-export const serviceName = (id: string): string => TEST_SERVICES.find((s) => s.id === id)?.name ?? id
+/* Свои домены пользователя тест проверяет наравне с сервисами: каждый —
+   отдельная строка итога и те же два очка. Их вписали, потому что они нужны,
+   и стратегия, которая открывает YouTube, но не их, человеку не подходит. */
+
+/** Больше доменов тест не берёт: перебор двух десятков стратегий растянулся бы на часы */
+export const TEST_USER_LIMIT = 100
+
+const USER_SERVICE = 'user:'
+export const isUserService = (id: string): boolean => id.startsWith(USER_SERVICE)
+
+export interface UserTestDomain {
+  domain: string
+  /** Записан как `^домен`: обход работает только для самого имени, без поддоменов */
+  exact: boolean
+}
+
+/** Что из своего списка можно проверить: имена без повторов, без служебного `^` и без IP-адресов */
+export function userTestDomains(list: string[]): UserTestDomain[] {
+  const seen = new Map<string, UserTestDomain>()
+  for (const raw of list) {
+    const exact = raw.startsWith('^')
+    const domain = raw.replace(/^\^/, '').replace(/^\.+|\.+$/g, '')
+    if (!domain || /^\d{1,3}(\.\d{1,3}){3}$/.test(domain)) continue
+    // Тот же домен и с `^`, и без — обход шире у записи без `^`, по ней и проверяем
+    if (!seen.has(domain) || !exact) seen.set(domain, { domain, exact })
+  }
+  return [...seen.values()]
+}
+
+/** host — имя, по которому сайт отзывается: сам домен или он же с www */
+export function userService(domain: string, host = domain): TestService {
+  return { id: `${USER_SERVICE}${domain}`, name: domain, checks: [{ kind: 'load', url: `https://${host}/`, redirects: 3 }] }
+}
+
+export const serviceName = (id: string): string =>
+  isUserService(id) ? id.slice(USER_SERVICE.length) : (TEST_SERVICES.find((s) => s.id === id)?.name ?? id)
 
 export const checkLabel = (c: ServiceCheck): string =>
   c.kind === 'tcp' ? `${c.host}:${c.port}` : c.url.replace(/^https:\/\//, '').replace(/\/$/, '')
@@ -487,12 +524,19 @@ export function pickBest(results: ZapretStrategyResult[]): string | undefined {
 }
 
 /** Отчёт проверки доступности — чтобы им можно было поделиться */
-export function formatServicesReport(baseline: ZapretServiceResult[] | undefined, results: ZapretStrategyResult[], best?: string): string {
+export function formatServicesReport(
+  baseline: ZapretServiceResult[] | undefined,
+  results: ZapretStrategyResult[],
+  best?: string,
+  user: Pick<ZapretTestProgress, 'unresolved' | 'skipped'> = {}
+): string {
   const mark = (s: ZapretServiceResult): string => (s.status === 'ok' ? 'да' : s.status === 'partial' ? 'частично' : 'нет')
   const line = (list: ZapretServiceResult[]): string =>
     list.map((s) => `${serviceName(s.id)} — ${mark(s)}${s.status !== 'ok' && s.error ? ` (${s.error})` : ''}`).join('; ')
   const out = ['Prism — проверка доступности через zapret', '']
   if (baseline) out.push(`Без обхода: ${line(baseline)}`)
+  if (user.unresolved?.length) out.push(`Свои домены без адреса, не проверялись: ${user.unresolved.join(', ')}`)
+  if (user.skipped) out.push(`Своих доменов больше ${TEST_USER_LIMIT}, не проверялись: ${user.skipped}`)
   out.push(`Лучшая стратегия: ${best ? strategyLabel(best) : 'не нашлась'}`, '')
   for (const r of results) {
     if (!r.started) {
