@@ -132,6 +132,12 @@ export class Core extends EventEmitter {
       return { ok: false, error: err }
     }
 
+    // sing-box помнит выбор селектора в cache.db и при запуске ставит его поверх
+    // default из конфига. Без этого сервер, выбранный при выключенном VPN,
+    // молча не применялся: в окне новый, а трафик шёл через прежний.
+    const active = d.nodes.find((n) => n.id === d.activeNodeId)
+    if (active) await this.clash.selectNode(TAG_PROXY, this.tagOf(active)).catch(() => {})
+
     // 4. Системный прокси
     if (st.captureMode === 'proxy') {
       try {
