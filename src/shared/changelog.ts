@@ -13,6 +13,13 @@ export interface ReleaseNote {
 
 export const CHANGELOG: ReleaseNote[] = [
   {
+    version: '1.7.3',
+    date: '2026-10-14',
+    items: [
+      'Сервер, выбранный при выключенном VPN, теперь применяется при подключении — раньше трафик мог идти через прежний'
+    ]
+  },
+  {
     version: '1.7.2',
     date: '2026-10-12',
     items: [
