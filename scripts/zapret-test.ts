@@ -6,13 +6,15 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createServer } from 'node:http'
-import type { AddressInfo } from 'node:net'
+import { createServer as createTcpServer, type AddressInfo } from 'node:net'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { deflateRawSync } from 'node:zlib'
 import {
   DEFAULT_ZAPRET,
+  TELEGRAM_CIDRS,
+  withTelegramProfile,
   EXTRA_DOMAINS,
   IPSET_PLACEHOLDER,
   cleanList,
@@ -37,7 +39,7 @@ import {
   userService,
   userTestDomains
 } from '../src/shared/zapret'
-import { loadCheck, siteHost } from '../src/main/zapret-net'
+import { loadCheck, siteHost, mtprotoCheck } from '../src/main/zapret-net'
 import { unzip } from '../src/main/unzip'
 import { store } from '../src/main/store'
 import { zapret, zapretPaths } from '../src/main/zapret'
@@ -192,6 +194,41 @@ async function main(): Promise<void> {
   ok('чужие домены и подделки под свои — нет', !foreign.some(hostsAllowed), foreign.filter(hostsAllowed).join(', '))
 
   /* ─────────────────────────── тест стратегий ─────────────────────────── */
+
+  console.log('\n▸ Telegram MTProto')
+  const original = ['--wf-tcp=443', '--wf-udp=443', '--filter-tcp=443', '--dpi-desync=fake']
+  const tg = withTelegramProfile(original, 'multisplit', 'C:\\lists\\')
+  ok('Telegram раньше общих профилей и только по ipset', tg.indexOf('--ipset=C:\\lists\\ipset-telegram.txt') < tg.indexOf('--new') && tg.indexOf('--new') < tg.lastIndexOf('--filter-tcp=443'))
+  ok('порты MTProto захватываются независимо от игр', tg.includes('--wf-tcp=443,80,443,5222') && tg.includes('--dpi-desync-any-protocol=1'))
+  ok('исключения IP соблюдаются', tg.includes('--ipset-exclude=C:\\lists\\ipset-exclude-user.txt'))
+  ok('выключенный профиль сохраняет исходные аргументы', withTelegramProfile(original, 'off', '') === original)
+  ok('альтернативный режим', withTelegramProfile(original, 'multidisorder', '').includes('--dpi-desync=multidisorder'))
+  for (const mode of ['valid', 'wrong-nonce', 'garbage', 'close', 'stall'] as const) {
+    const server = createTcpServer((socket) => {
+      let request = Buffer.alloc(0)
+      socket.on('error', () => {})
+      socket.on('data', (data) => {
+        request = Buffer.concat([request, data])
+        if (request.length < 48) return
+        if (mode === 'close') { socket.end(); return }
+        if (mode === 'stall') return
+        if (mode === 'garbage') { socket.end('HTTP/1.1 200 OK\r\n\r\n'); return }
+        const reply = Buffer.alloc(88)
+        reply.writeUInt32LE(84, 0)
+        reply.writeUInt32LE(64, 20)
+        reply.writeUInt32LE(0x05162463, 24)
+        request.copy(reply, 28, 32, 48)
+        if (mode === 'wrong-nonce') reply[28] ^= 1
+        // Разбиваем ответ: TCP не гарантирует, что фрейм придёт целиком.
+        socket.write(reply.subarray(0, 2))
+        setTimeout(() => socket.end(reply.subarray(2)), 5)
+      })
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const result = await mtprotoCheck('127.0.0.1', (server.address() as AddressInfo).port, 150)
+    ok(`MTProto ${mode}`, result.ok === (mode === 'valid'), result.error)
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  }
 
   console.log('\n▸ Итоги теста: DPI-чекеры')
   const res = (strategy: string, okN: number, pingOk: number, started = true): ZapretStrategyResult => ({
@@ -362,6 +399,7 @@ async function main(): Promise<void> {
   ok('«не проверять свои домены» — в тесте их нет', DEFAULT_ZAPRET.testOwnDomains && skippedOwn.length === 0 && !quiet.unresolved && !quiet.skipped)
   const checkedOwn = await internal.userServices({ ...cfg, lists: { ...cfg.lists, general: ['localhost'] } }, quiet)
   ok('по умолчанию свои домены в тесте есть', checkedOwn.map((x) => x.id).join() === 'user:localhost', checkedOwn.map((x) => x.id).join())
+  ok('отдельный ipset Telegram материализован', TELEGRAM_CIDRS.every((cidr) => rd('ipset-telegram.txt').includes(cidr)))
   const argv = internal.args(internal.pack, 'general', cfg, run)
   ok('аргументы ссылаются на рабочие списки', argv.includes(`--hostlist=${join(run, 'list-general.txt')}`))
 
@@ -401,6 +439,13 @@ async function main(): Promise<void> {
             if (f && !existsSync(f)) broken.push(`${st.label}: ${f}`)
           }
           if (a.some((x) => !x.startsWith('--'))) broken.push(`${st.label}: аргумент без --`)
+          if (process.platform === 'win32') {
+            for (const telegramMode of ['off', 'multisplit', 'multidisorder'] as const) {
+              const args = internal.args(internal.pack, st.id, { ...DEFAULT_ZAPRET, gameFilter, telegramMode }, run)
+              const checked = spawnSync(join(zapretPaths.packs, s.pack!.version, 'bin', 'winws.exe'), ['--dry-run', ...args], { timeout: 10000, windowsHide: true, encoding: 'utf8' })
+              if (checked.status !== 0) broken.push(`${st.label}/${telegramMode}: ${checked.error?.message ?? checked.stderr ?? checked.stdout}`)
+            }
+          }
         } catch (e) {
           broken.push(`${st.label}: ${(e as Error).message}`)
         }

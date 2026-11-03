@@ -296,6 +296,8 @@ export interface ZapretConfig {
   fakeGame: string
   /** Добавлять к спискам сборки домены Prism — Telegram-веб и картинки Spotify */
   extraDomains: boolean
+  /** Отдельный профиль MTProto по IP-сетям Telegram */
+  telegramMode: 'off' | 'multisplit' | 'multidisorder'
   /** Проверять в тесте стратегий и свои домены — с длинным списком тест идёт дольше, тогда выключают */
   testOwnDomains: boolean
   /** Поднимать обход при запуске Prism */

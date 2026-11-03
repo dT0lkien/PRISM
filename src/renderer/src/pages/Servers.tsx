@@ -20,6 +20,8 @@ import type { ServerNode, Subscription } from '@shared/types'
 export default function Servers(): JSX.Element {
   const { snap, setSnap, toast, core } = useStore()
   const [q, setQ] = useState('')
+  const [subscription, setSubscription] = useState('all')
+  const [sort, setSort] = useState('original')
   const [addOpen, setAddOpen] = useState(false)
   const [subOpen, setSubOpen] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -30,11 +32,18 @@ export default function Servers(): JSX.Element {
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase()
-    if (!s) return snap.nodes
-    return snap.nodes.filter(
-      (n) => n.name.toLowerCase().includes(s) || n.server.toLowerCase().includes(s) || n.type.includes(s)
-    )
-  }, [snap.nodes, q])
+    const subName = (n: ServerNode): string => snap.subscriptions.find((sub) => sub.id === n.subscriptionId)?.name ?? 'Без подписки'
+    const nodes = snap.nodes.filter((n) =>
+      (subscription === 'all' || (subscription === 'manual' ? !n.subscriptionId : n.subscriptionId === subscription)) &&
+      (!s || [n.name, n.server, n.type, subName(n)].some((v) => v.toLowerCase().includes(s))))
+    if (sort === 'subscription') nodes.sort((a, b) => subName(a).localeCompare(subName(b), 'ru', { numeric: true }) ||
+      (a.subscriptionId ?? '').localeCompare(b.subscriptionId ?? '') || a.name.localeCompare(b.name, 'ru', { numeric: true }))
+    if (sort === 'name') nodes.sort((a, b) => a.name.localeCompare(b.name, 'ru', { numeric: true }))
+    if (sort === 'latency') nodes.sort((a, b) =>
+      (a.latency !== undefined && a.latency >= 0 ? a.latency : Infinity) -
+      (b.latency !== undefined && b.latency >= 0 ? b.latency : Infinity))
+    return nodes
+  }, [snap.nodes, snap.subscriptions, q, subscription, sort])
 
   const select = async (n: ServerNode): Promise<void> => {
     await window.prism.nodes.select(n.id)
@@ -180,6 +189,21 @@ export default function Servers(): JSX.Element {
         </>
       )}
 
+      <div className="row wrap" style={{ gap: 9, marginTop: 18, marginBottom: 12 }}>
+        <select className="select" aria-label="Подписка серверов" value={subscription} onChange={(e) => setSubscription(e.target.value)}>
+          <option value="all">Все подписки</option>
+          <option value="manual">Без подписки</option>
+          {snap.subscriptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <select className="select" aria-label="Сортировка серверов" value={sort} onChange={(e) => setSort(e.target.value)}>
+          <option value="original">Исходный порядок</option>
+          <option value="subscription">По подписке</option>
+          <option value="name">По названию</option>
+          <option value="latency">По задержке</option>
+        </select>
+        {(q || subscription !== 'all') && <button className="btn sm ghost" onClick={() => { setQ(''); setSubscription('all') }}>Сбросить фильтры</button>}
+      </div>
+
       <div className="section-title">
         Серверы {snap.nodes.length > 0 && <span className="dim">· {filtered.length}</span>}
       </div>
@@ -202,6 +226,8 @@ export default function Servers(): JSX.Element {
             </div>
           }
         />
+      ) : !filtered.length ? (
+        <Empty icon={<Search size={32} />} title="Серверы не найдены" text="Измените поиск или выберите другую подписку." />
       ) : (
         <div className="list">
           <AnimatePresence initial={false}>

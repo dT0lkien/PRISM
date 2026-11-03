@@ -41,6 +41,7 @@ export const DEFAULT_ZAPRET: ZapretConfig = {
   fakeDiscord: '',
   fakeGame: '',
   extraDomains: true,
+  telegramMode: 'multisplit',
   testOwnDomains: true,
   autoStart: false,
   checkUpdates: true,
@@ -60,9 +61,34 @@ export const EXTRA_DOMAIN_GROUPS: { group: string; note: string; domains: string
 
 /** Про что обход бессилен — об этом честно сказать рядом с переключателем */
 export const EXTRA_DOMAINS_NOTE =
-  'Telegram Desktop так не чинится: его дата-центры закрыты по IP, а обход правит только содержимое пакетов — тут нужен VPN.'
+  'Для приложения Telegram включите отдельный профиль ниже. При блокировке по IP используйте VPN.'
 
 export const EXTRA_DOMAINS = EXTRA_DOMAIN_GROUPS.flatMap((g) => g.domains)
+
+/** Официальные сети: https://core.telegram.org/resources/cidr.txt */
+export const TELEGRAM_CIDRS = [
+  '91.108.56.0/22', '91.108.4.0/22', '91.108.8.0/22', '91.108.16.0/22',
+  '91.108.12.0/22', '149.154.160.0/20', '91.105.192.0/23', '91.108.20.0/22',
+  '185.76.151.0/24', '2001:b28:f23d::/48', '2001:b28:f23f::/48',
+  '2001:67c:4e8::/48', '2001:b28:f23c::/48', '2a0a:f280::/32'
+]
+
+/** Перед общими профилями: MTProto не содержит HTTP Host / TLS SNI.
+ * Не зависит от Game Filter и ipset-all. Исключения пользователя соблюдаются. */
+export function withTelegramProfile(args: string[], mode: ZapretConfig['telegramMode'], lists: string): string[] {
+  if (!mode || mode === 'off') return args
+  const capture = args.filter((a) => a.startsWith('--wf-')).map((a) =>
+    a.startsWith('--wf-tcp=') ? `${a},80,443,5222` : a)
+  if (!capture.some((a) => a.startsWith('--wf-tcp='))) capture.push('--wf-tcp=80,443,5222')
+  return [
+    ...capture,
+    '--filter-tcp=80,443,5222', `--ipset=${lists}ipset-telegram.txt`,
+    `--ipset-exclude=${lists}ipset-exclude.txt`, `--ipset-exclude=${lists}ipset-exclude-user.txt`,
+    `--dpi-desync=${mode}`, '--dpi-desync-any-protocol=1',
+    '--dpi-desync-split-pos=1', '--dpi-desync-cutoff=n4', '--new',
+    ...args.filter((a) => !a.startsWith('--wf-'))
+  ]
+}
 
 export const GAME_FILTERS: readonly ZapretGameFilter[] = ['off', 'all', 'tcp', 'udp']
 export const IPSET_MODES: readonly ZapretIpsetMode[] = ['none', 'loaded', 'any']
@@ -384,7 +410,7 @@ export function removeHostsBlock(current: string): string {
 /* ─────────────────────────── проверка доступности ─────────────────────────── */
 
 /** redirects — сколько переадресаций пройти следом: у своих доменов за «/» часто стоит только она */
-export type ServiceCheck = { kind: 'load'; url: string; redirects?: number } | { kind: 'tcp'; host: string; port: number }
+export type ServiceCheck = { kind: 'load'; url: string; redirects?: number } | { kind: 'tcp'; host: string; port: number } | { kind: 'mtproto'; host: string; port: number }
 
 export interface TestService {
   id: string
@@ -395,7 +421,7 @@ export interface TestService {
 }
 
 const load = (url: string): ServiceCheck => ({ kind: 'load', url })
-const tcp = (host: string, port = 443): ServiceCheck => ({ kind: 'tcp', host, port })
+const mtproto = (host: string, port = 443): ServiceCheck => ({ kind: 'mtproto', host, port })
 
 /**
  * Что проверяет кнопка «Тест». Не адреса, а сервисы, ради которых ставят
@@ -420,13 +446,10 @@ export const TEST_SERVICES: TestService[] = [
     checks: [load('https://web.telegram.org/k/'), load('https://telegram.org/'), load('https://t.me/telegram')]
   },
   {
-    /* Приложение ходит в дата-центры по своему протоколу, без имени сайта.
-       Если до них не доходит даже TCP — это блокировка по адресу, и обход,
-       который правит содержимое пакетов, тут бессилен */
     id: 'telegram-app',
     name: 'Telegram: приложение',
     any: true,
-    checks: [tcp('149.154.167.51'), tcp('149.154.175.50'), tcp('91.108.56.130')]
+    checks: [mtproto('149.154.167.51'), mtproto('149.154.175.50'), mtproto('91.108.56.130')]
   },
   {
     id: 'spotify',
@@ -481,7 +504,7 @@ export const serviceName = (id: string): string =>
   isUserService(id) ? id.slice(USER_SERVICE.length) : (TEST_SERVICES.find((s) => s.id === id)?.name ?? id)
 
 export const checkLabel = (c: ServiceCheck): string =>
-  c.kind === 'tcp' ? `${c.host}:${c.port}` : c.url.replace(/^https:\/\//, '').replace(/\/$/, '')
+  c.kind !== 'load' ? `${c.kind === 'mtproto' ? 'MTProto ' : ''}${c.host}:${c.port}` : c.url.replace(/^https:\/\//, '').replace(/\/$/, '')
 
 export function serviceStatus(ok: number, total: number, any = false): ZapretServiceStatus {
   if (ok === 0) return 'fail'

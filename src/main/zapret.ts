@@ -51,6 +51,8 @@ import {
   EXTRA_DOMAINS,
   IPSET_PLACEHOLDER,
   ZAPRET_DPI_SUITE_URL,
+  TELEGRAM_CIDRS,
+  withTelegramProfile,
   ZAPRET_RELEASE_API,
   ZAPRET_REPO,
   compareStrategies,
@@ -77,7 +79,7 @@ import {
 import { store } from './store'
 import { IS_WIN, PS_UTF8, isElevated, psUtf8 } from './win'
 import { unzip } from './unzip'
-import { CHECKS, dpiCheck, fetchBuffer, loadCheck, pool, siteHost, tcpCheck } from './zapret-net'
+import { CHECKS, dpiCheck, fetchBuffer, loadCheck, pool, siteHost, tcpCheck, mtprotoCheck } from './zapret-net'
 import { downloadIpset, enableTcpTimestamps } from './zapret-tools'
 
 const exec = promisify(execFile)
@@ -541,19 +543,20 @@ export class Zapret extends EventEmitter {
     write('list-general-user.txt', general.length ? general : ['# Never leave this file empty', DOMAIN_PLACEHOLDER])
     write('list-exclude-user.txt', l.exclude.length ? l.exclude : [DOMAIN_PLACEHOLDER])
     write('ipset-exclude-user.txt', l.ipsetExclude.length ? l.ipsetExclude : [IPSET_PLACEHOLDER])
+    write('ipset-telegram.txt', TELEGRAM_CIDRS)
     write('ipset-all.txt', ipsetContent(ipsetMode, ipsetMode === 'loaded' ? loadedIpset(pack) : [], l.ipset))
   }
 
   private args(pack: Pack, id: string, cfg: ZapretConfig, listsDir: string): string[] {
     const tpl = pack.templates.get(id)
     if (!tpl) throw new Error(`В сборке ${pack.version} нет стратегии «${strategyLabel(id)}»`)
-    return expandStrategy(tpl, {
+    return withTelegramProfile(expandStrategy(tpl, {
       bin: join(pack.dir, 'bin') + sep,
       lists: listsDir + sep,
       gameFilter: cfg.gameFilter,
       fakeDiscord: pack.fakes.includes(cfg.fakeDiscord) ? cfg.fakeDiscord : '',
       fakeGame: pack.fakes.includes(cfg.fakeGame) ? cfg.fakeGame : ''
-    })
+    }), cfg.telegramMode, listsDir + sep)
   }
 
   private spawnWinws(pack: Pack, args: string[], piped: boolean): ChildProcess {
@@ -1165,7 +1168,7 @@ export class Zapret extends EventEmitter {
   private async serviceChecks(services: TestService[]): Promise<ZapretServiceResult[]> {
     const jobs = services.flatMap((sv) => sv.checks.map((c) => ({ sv, c })))
     // Встроенных проверок 16, и они идут все разом; со своими доменами — вдвое шире, чтобы круг не затягивался
-    const res = await pool(jobs, 32, ({ c }) => (c.kind === 'tcp' ? tcpCheck(c.host, c.port) : loadCheck(c.url, { redirects: c.redirects })))
+    const res = await pool(jobs, 32, ({ c }) => (c.kind === 'mtproto' ? mtprotoCheck(c.host, c.port) : c.kind === 'tcp' ? tcpCheck(c.host, c.port) : loadCheck(c.url, { redirects: c.redirects })))
     return services.map((sv) => {
       const mine = jobs.map((j, i) => ({ j, r: res[i] })).filter((x) => x.j.sv === sv)
       const checks = mine.map(({ j, r }) => ({ target: checkLabel(j.c), ok: r.ok, ms: r.ok ? r.ms : undefined, error: r.error }))

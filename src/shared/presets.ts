@@ -1,5 +1,6 @@
 /* Пресеты маршрутизации. Каждый пресет разворачивается в набор правил sing-box. */
 
+import { TELEGRAM_CIDRS } from './zapret'
 import type { Matcher, RuleAction } from './types'
 
 export interface PresetRule {
@@ -89,6 +90,7 @@ export const PRESETS: RoutingPreset[] = [
     defaultOn: true,
     rules: [
       { action: 'proxy', matchers: [{ kind: 'ruleset', values: ['geosite-telegram'] }] },
+      { action: 'proxy', matchers: [{ kind: 'ip_cidr', values: TELEGRAM_CIDRS }] },
       { action: 'proxy', matchers: [{ kind: 'process', values: ['Telegram.exe', 'Unigram.exe'] }] }
     ]
   },

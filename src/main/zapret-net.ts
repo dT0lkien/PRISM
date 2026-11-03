@@ -198,6 +198,49 @@ export function tcpCheck(host: string, port: number, timeoutMs = 3000): Promise<
   })
 }
 
+/** Проверяет ответ req_pq_multi, без входа в аккаунт и создания ключа.
+ * Intermediate transport: https://core.telegram.org/mtproto/mtproto-transports */
+export function mtprotoCheck(host: string, port = 443, timeoutMs = 5000): Promise<LoadResult> {
+  return new Promise((resolve) => {
+    const t0 = Date.now()
+    const nonce = randomBytes(16)
+    const request = Buffer.alloc(48)
+    request.fill(0xee, 0, 4) // intermediate transport marker
+    request.writeUInt32LE(40, 4)
+    request.writeBigUInt64LE((BigInt(t0) * (1n << 32n) / 1000n) & ~3n, 16)
+    request.writeUInt32LE(20, 24)
+    request.writeUInt32LE(0xbe7e8ef1, 28) // req_pq_multi
+    nonce.copy(request, 32)
+    let done = false
+    let received = Buffer.alloc(0)
+    const sock = connect({ host, port })
+    const timer = setTimeout(() => finish(false, 'нет ответа MTProto'), timeoutMs)
+    function finish(ok: boolean, error?: string): void {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      sock.destroy()
+      resolve({ ok, ms: Date.now() - t0, error })
+    }
+    sock.once('connect', () => sock.write(request))
+    sock.on('data', (chunk: Buffer) => {
+      if (done) return
+      if (received.length + chunk.length > 4100) return finish(false, 'неверный ответ MTProto')
+      received = Buffer.concat([received, chunk])
+      if (received.length < 4) return
+      const length = received.readUInt32LE(0)
+      if (length < 76 || length > 4096 || length % 4) return finish(false, 'неверный ответ MTProto')
+      if (received.length < length + 4) return
+      const msg = received.subarray(4, length + 4)
+      const valid = msg.readBigUInt64LE(0) === 0n && msg.readUInt32LE(16) === length - 20 &&
+        msg.readUInt32LE(20) === 0x05162463 && msg.subarray(24, 40).equals(nonce)
+      finish(valid, valid ? undefined : 'неверный ответ MTProto')
+    })
+    sock.once('error', (e: NodeJS.ErrnoException) => finish(false, reason(e)))
+    sock.once('close', () => finish(false, 'соединение закрыто до ответа MTProto'))
+  })
+}
+
 export interface DpiResult {
   code: string
   up: number

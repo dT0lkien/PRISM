@@ -26,7 +26,7 @@ import {
   Square,
   Stethoscope
 } from 'lucide-react'
-import type { ZapretGameFilter, ZapretIpsetMode, ZapretLists, ZapretState } from '@shared/types'
+import type { ZapretConfig, ZapretGameFilter, ZapretIpsetMode, ZapretLists, ZapretState } from '@shared/types'
 import { EXTRA_DOMAINS, EXTRA_DOMAINS_NOTE, EXTRA_DOMAIN_GROUPS, ZAPRET_REPO_URL, compareVersions, strategyLabel } from '@shared/zapret'
 import { duration, plural, useStore } from '../store'
 import { Empty, Segmented, Setting, Switch } from '../ui'
@@ -108,6 +108,8 @@ export default function ZapretPage(): JSX.Element {
         </p>
       </div>
 
+      <TelegramVpn />
+
       {!z.supported ? (
         <div className="card">
           <Empty
@@ -123,6 +125,31 @@ export default function ZapretPage(): JSX.Element {
       )}
     </>
   )
+}
+
+function TelegramVpn(): JSX.Element {
+  const { snap, busy, setPage, setPresets, patchSettings, connect, toast } = useStore()
+  const [working, setWorking] = useState(false)
+  const enable = async (): Promise<void> => {
+    if (!snap.nodes.length || !snap.activeNodeId) { setPage('servers'); return }
+    setWorking(true)
+    try {
+      await setPresets([...new Set([...snap.enabledPresets, 'telegram'])])
+      // TUN перехватывает MTProto по IP; системный HTTP-прокси Telegram может игнорировать.
+      await patchSettings({ captureMode: 'tun', routingMode: 'smart' })
+      setPage('dashboard')
+      await connect()
+    } catch (e) {
+      toast('error', `Не удалось подключить Telegram: ${String(e)}`)
+    } finally { setWorking(false) }
+  }
+  return <div className="card pad" style={{ marginBottom: 18 }}>
+    <b>Telegram через VPN</b>
+    <p className="dim">Если обход DPI не помогает: включает TUN и пресет Telegram с его IP-сетями. Нужен доступный сервер из вашей подписки. Остальные маршруты сохраняются.</p>
+    <button className="btn" disabled={busy || working} onClick={enable}>
+      {!snap.nodes.length || !snap.activeNodeId ? 'Выбрать сервер' : working ? 'Подключаю…' : 'Подключить Telegram через VPN'}
+    </button>
+  </div>
 }
 
 /* ─────────────── сборка не установлена ─────────────── */
@@ -364,6 +391,14 @@ function Installed(): JSX.Element {
             </button>
             <Switch on={cfg.extraDomains} onChange={(v) => patchZapret({ extraDomains: v })} />
           </div>
+        </Setting>
+
+        <Setting title="Telegram Desktop — обход DPI" hint="Отдельный профиль MTProto на портах 80, 443 и 5222, только для сетей Telegram. Не требует Game Filter. Попробуйте оба режима и запустите тест доступности. При блокировке по IP потребуется VPN; звонки этим профилем не проверяются.">
+          <select className="select" value={cfg.telegramMode} onChange={(e) => patchZapret({ telegramMode: e.target.value as ZapretConfig['telegramMode'] })}>
+            <option value="off">Выключен</option>
+            <option value="multisplit">Разделение пакетов</option>
+            <option value="multidisorder">Изменение порядка</option>
+          </select>
         </Setting>
 
         <Setting title="Фейк для голоса Discord" hint="Каким пакетом притворяется голосовой трафик Discord. Если голос не подключается — попробуйте другой.">

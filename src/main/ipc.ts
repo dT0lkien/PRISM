@@ -175,6 +175,7 @@ function cleanZapret(patch: Partial<ZapretConfig>, cur: ZapretConfig): ZapretCon
     const v = patch[k]
     if (isStr(v) && (v === '' || pack?.fakes.includes(v))) out[k] = v
   }
+  if (['off', 'multisplit', 'multidisorder'].includes(patch.telegramMode ?? '')) out.telegramMode = patch.telegramMode!
   if (typeof patch.extraDomains === 'boolean') out.extraDomains = patch.extraDomains
   if (typeof patch.testOwnDomains === 'boolean') out.testOwnDomains = patch.testOwnDomains
   if (typeof patch.autoStart === 'boolean') out.autoStart = patch.autoStart
@@ -594,7 +595,7 @@ export function registerIpc(): void {
     const after = cleanZapret(patch, before)
     store.patch({ zapret: after })
     pushSnapshot()
-    const keys: (keyof ZapretConfig)[] = ['strategy', 'gameFilter', 'ipsetMode', 'fakeDiscord', 'fakeGame', 'lists', 'extraDomains']
+    const keys: (keyof ZapretConfig)[] = ['strategy', 'gameFilter', 'ipsetMode', 'fakeDiscord', 'fakeGame', 'lists', 'extraDomains', 'telegramMode']
     if (keys.some((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))) zapret.scheduleApply()
     return snapshot()
   })

@@ -612,8 +612,8 @@ export function TestModal({ open, onClose }: { open: boolean; onClose: () => voi
               <div className="upd-notes zap-note warn">
                 <Smartphone size={16} />
                 <span className="grow">
-                  Приложение Telegram не пускают к его серверам по адресу. Обход меняет только содержимое пакетов и тут бессилен: нужен VPN
-                  (пресет Telegram на вкладке «Маршруты») или MTProto-прокси в настройках самого Telegram. Сайт и веб-версию обход открывает.
+                  Серверы Telegram не ответили на запрос MTProto. Попробуйте другой режим Telegram Desktop на вкладке Zapret. Если оба режима не помогают — используйте VPN
+                  (пресет Telegram на вкладке «Маршруты») или MTProto-прокси в настройках самого Telegram. Блокировку по IP обход DPI устранить не может.
                 </span>
                 <button
                   className="btn sm"
