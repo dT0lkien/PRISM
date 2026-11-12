@@ -142,7 +142,6 @@ export interface Settings {
   /** Проверять обновления в фоне */
   autoUpdate: boolean
   autoConnect: boolean
-  startElevated: boolean
   minimizeToTray: boolean
   closeToTray: boolean
   startMinimized: boolean

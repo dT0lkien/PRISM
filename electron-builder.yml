@@ -36,7 +36,7 @@ electronLanguages: [en-US, ru-RU]
 
 win:
   icon: build/icon.ico
-  requestedExecutionLevel: asInvoker
+  requestedExecutionLevel: requireAdministrator
   extraResources:
     - from: resources/core/win
       to: core
@@ -64,6 +64,8 @@ nsis:
 
 portable:
   artifactName: ${productName}-${version}-portable.${ext}
+  requestExecutionLevel: admin
+  unpackDirName: false
 
 mac:
   icon: build/icon.icns

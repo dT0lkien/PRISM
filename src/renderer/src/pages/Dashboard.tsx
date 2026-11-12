@@ -54,7 +54,7 @@ export default function Dashboard(): JSX.Element {
   const elevate = async (): Promise<void> => {
     try {
       if (!(await window.prism.core.elevate())) {
-        useStore.getState().toast('warn', 'Установка отменена')
+        useStore.getState().toast('warn', info?.isWindows ? 'Запуск от администратора отменён' : 'Установка помощника отменена')
         return
       }
     } catch (e) {

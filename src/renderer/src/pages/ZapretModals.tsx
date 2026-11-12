@@ -464,7 +464,13 @@ export function TestModal({ open, onClose }: { open: boolean; onClose: () => voi
           <span>{error}</span>
         </div>
         {needAdmin && (
-          <button className="btn sm" onClick={() => window.prism.core.elevate()}>
+          <button className="btn sm" onClick={async () => {
+            try {
+              if (!(await window.prism.core.elevate())) toast('warn', 'Запуск от администратора отменён')
+            } catch (e) {
+              toast('error', String((e as Error)?.message ?? e))
+            }
+          }}>
             Перезапустить от администратора
           </button>
         )}

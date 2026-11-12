@@ -58,7 +58,6 @@ const settings = {
   bypassPrivate: true,
   autoStart: true,
   autoConnect: false,
-  startElevated: true,
   minimizeToTray: true,
   closeToTray: true,
   startMinimized: false,
@@ -284,8 +283,7 @@ window.prism = {
     isWindows: true,
     // Подставив PRISM_APP_VERSION с номером из CHANGELOG, снимем окно «что нового»
     appVersion: process.env.PRISM_APP_VERSION || '1.0.0',
-    coreVersion: '1.13.15',
-    autoStartTask: true
+    coreVersion: '1.13.15'
   }),
   core: {
     start: async () => ({ ok: true }),
@@ -330,7 +328,6 @@ window.prism = {
   system: {
     openDataDir: async () => {},
     resetSystemProxy: async () => {},
-    setAutoStart: async () => ({ ok: true }),
     openExternal: async () => {},
     clipboardRead: async () => '',
     clipboardWrite: async () => {}

@@ -256,7 +256,11 @@ function ElevateNote(): JSX.Element {
       <button
         className="btn sm"
         onClick={async () => {
-          if (!(await window.prism.core.elevate())) toast('warn', 'Запуск от администратора отменён')
+          try {
+            if (!(await window.prism.core.elevate())) toast('warn', 'Запуск от администратора отменён')
+          } catch (e) {
+            toast('error', String((e as Error)?.message ?? e))
+          }
         }}
       >
         <ShieldCheck size={14} />

@@ -353,11 +353,57 @@ Write-Output $result
 `
 
 const REMOVE_SCRIPT = String.raw`
-$ErrorActionPreference = 'SilentlyContinue'
+$ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-if (Get-Service -Name zapret) { Stop-Service -Name zapret -Force; & sc.exe delete zapret | Out-Null }
-Get-Process -Name winws | Stop-Process -Force
-foreach ($n in 'WinDivert', 'WinDivert14') { & sc.exe stop $n | Out-Null; & sc.exe delete $n | Out-Null }
+${PS_UTF8}
+$errors = [Collections.Generic.List[string]]::new()
+try {
+  $sc = Join-Path ([Environment]::SystemDirectory) 'sc.exe'
+  # Stop может вернуть «не запущена» или «не существует». Результат проверяем
+  # после удаления, когда все winws отпустили дескрипторы драйвера.
+  & $sc stop zapret | Out-Null
+  Get-Process -Name winws -ErrorAction SilentlyContinue | ForEach-Object {
+    $process = $_
+    try { $process | Stop-Process -Force -ErrorAction Stop }
+    catch {
+      if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) {
+        $errors.Add('Не удалось остановить winws.exe: ' + $_.Exception.Message)
+      }
+    }
+  }
+  foreach ($name in 'zapret', 'WinDivert', 'WinDivert14') {
+    try {
+      & $sc stop $name | Out-Null
+      & $sc delete $name | Out-Null
+      $code = $LASTEXITCODE
+      # 1060 — службы уже нет, 1072 — удаление уже запрошено.
+      if ($code -notin @(0, 1060, 1072)) {
+        throw ('Windows, код ' + $code + ': ' + [ComponentModel.Win32Exception]::new($code).Message)
+      }
+      $deadline = [DateTime]::UtcNow.AddSeconds(10)
+      do {
+        & $sc query $name | Out-Null
+        $code = $LASTEXITCODE
+        if ($code -eq 1060) { break }
+        if ($code -notin @(0, 1072)) {
+          throw ('Windows, код ' + $code + ': ' + [ComponentModel.Win32Exception]::new($code).Message)
+        }
+        if ([DateTime]::UtcNow -ge $deadline) {
+          throw 'Windows ещё удерживает службу. Закройте окно «Службы» и другие программы, использующие WinDivert, затем повторите удаление. Если это не поможет, перезагрузите Windows.'
+        }
+        Start-Sleep -Milliseconds 250
+      } while ($true)
+    } catch {
+      $errors.Add($name + ': ' + $_.Exception.Message)
+    }
+  }
+} catch {
+  $errors.Add($_.Exception.Message)
+}
+if ($errors.Count) { Write-Output ('ERR:' + ($errors -join [Environment]::NewLine)) }
+else { Write-Output 'OK' }
+# Отсутствующий WinDivert14 не должен становиться кодом выхода PowerShell.
+exit 0
 `
 
 /* ─────────────────────────── менеджер ─────────────────────────── */
@@ -761,9 +807,27 @@ export class Zapret extends EventEmitter {
     if (!IS_WIN) throw new Error('Zapret работает только в Windows')
     if (!(await isElevated())) throw new Error('Нужны права администратора')
     if (this.test?.running) throw new Error('Идёт тест стратегий — дождитесь конца')
+    if (this.applyTimer) clearTimeout(this.applyTimer)
+    this.applyTimer = null
     await this.stop(true)
-    await psUtf8(REMOVE_SCRIPT, 60000)
-    await this.refresh()
+    try {
+      let out: string
+      try {
+        out = (await psUtf8(REMOVE_SCRIPT, 60000)).trim()
+      } catch (e) {
+        console.error('[zapret] удаление службы:', e)
+        const timedOut = (e as { killed?: boolean }).killed
+        throw new Error(timedOut
+          ? 'Windows не завершила удаление за минуту. Закройте окно «Службы» и повторите попытку.'
+          : 'Не удалось выполнить удаление службы через PowerShell. Проверьте, что запуск PowerShell разрешён в Windows.')
+      }
+      if (out !== 'OK') {
+        throw new Error(`Не удалось удалить службу zapret и WinDivert: ${out.replace(/^ERR:/, '') || 'PowerShell не подтвердил удаление'}`)
+      }
+    } finally {
+      // При частичном удалении интерфейс тоже должен показать фактическое состояние.
+      await this.refresh()
+    }
     this.log('Служба zapret и драйвер WinDivert удалены')
   }
 

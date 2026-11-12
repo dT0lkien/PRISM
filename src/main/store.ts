@@ -74,9 +74,15 @@ export const paths = {
   }
 }
 
+function defaultSettings(): Settings {
+  const settings = structuredClone(DEFAULT_SETTINGS)
+  if (process.platform === 'win32' && app.isPackaged) settings.autoStart = true
+  return settings
+}
+
 function defaults(): StoreData {
   return {
-    settings: structuredClone(DEFAULT_SETTINGS),
+    settings: defaultSettings(),
     nodes: [],
     subscriptions: [],
     appRules: [],
@@ -91,15 +97,17 @@ function defaults(): StoreData {
 /** Мержим сохранённое поверх дефолтов, чтобы новые поля появлялись у старых пользователей */
 function reconcile(saved: Partial<StoreData>): StoreData {
   const d = defaults()
-  const s = saved.settings ?? {}
+  const { startElevated, ...s } = (saved.settings ?? {}) as Partial<Settings> & { startElevated?: boolean }
+  // Старые Windows-сборки по умолчанию не регистрировали автозапуск.
+  if (startElevated !== undefined && process.platform === 'win32' && app.isPackaged) s.autoStart = true
   return {
     ...d,
     ...saved,
     settings: {
       ...d.settings,
       ...s,
-      tun: { ...d.settings.tun, ...(s as Settings).tun },
-      dns: { ...d.settings.dns, ...(s as Settings).dns }
+      tun: { ...d.settings.tun, ...s.tun },
+      dns: { ...d.settings.dns, ...s.dns }
     },
     clashSecret: saved.clashSecret || d.clashSecret,
     totals: saved.totals ?? d.totals,
@@ -173,6 +181,10 @@ class Store {
     }
     this.save()
     return this.data.settings
+  }
+
+  resetSettings(): Settings {
+    return this.setSettings(defaultSettings())
   }
 
   /** Запись с задержкой — чтобы не долбить диск на каждый чих */

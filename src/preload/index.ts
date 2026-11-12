@@ -45,7 +45,6 @@ export interface BootstrapInfo {
   /** Версия, для которой окно «что изменилось» уже показывали */
   seenVersion?: string
   coreVersion: string
-  autoStartTask: boolean
 }
 
 const invoke = <T>(ch: string, ...args: unknown[]): Promise<T> => ipcRenderer.invoke(ch, ...args) as Promise<T>
@@ -112,7 +111,6 @@ const api = {
   system: {
     openDataDir: () => invoke<void>('system:openDataDir'),
     resetSystemProxy: () => invoke<void>('system:resetSystemProxy'),
-    setAutoStart: (enabled: boolean, elevated: boolean) => invoke<{ ok: boolean; error?: string }>('system:setAutoStart', enabled, elevated),
     openExternal: (url: string) => invoke<void>('system:openExternal', url),
     clipboardRead: () => invoke<string>('system:clipboardRead'),
     clipboardWrite: (text: string) => invoke<void>('system:clipboardWrite', text)

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Tray, nativeImage, shell } from 'electron'
+import { app, BrowserWindow, Menu, Tray, dialog, nativeImage, shell } from 'electron'
 import { dirname, join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { store, paths } from './store'
@@ -8,11 +8,14 @@ import { isAppUrl, registerIpc, setMainWindow, snapshot, wireCoreEvents } from '
 import {
   clearStaleProxy,
   clearSystemProxy,
+  elevationAttempted,
   emergencyCleanupSync,
   isElevated,
   killPidSync,
   killStrayCores,
+  relaunchElevated,
   setAutoStart,
+  waitForPreviousInstance,
   IS_WIN
 } from './win'
 import { zapret } from './zapret'
@@ -40,10 +43,6 @@ let quitting = false
 let cleanedUp = false
 
 const startMinimized = process.argv.includes('--minimized')
-
-if (!app.requestSingleInstanceLock()) {
-  app.exit(0)
-}
 
 app.setAppUserModelId('com.prism.vpn')
 // Аппаратное ускорение иногда конфликтует с виртуальными адаптерами на Windows
@@ -293,7 +292,22 @@ app.on('second-instance', () => {
   }
 })
 
-app.whenReady().then(async () => {
+async function start(): Promise<void> {
+  if (IS_WIN) {
+    if (!(await isElevated())) {
+      if (elevationAttempted) throw new Error('Windows запустила Prism без прав администратора')
+      await relaunchElevated()
+      app.exit(0)
+      return
+    }
+    // После UAC старый процесс ещё может останавливать туннель и сохранять настройки.
+    await waitForPreviousInstance()
+  }
+  if (!app.requestSingleInstanceLock()) {
+    app.exit(0)
+    return
+  }
+
   store.load()
 
   // Хвосты после аварийного завершения: Windows не убивает дочерние процессы
@@ -343,17 +357,23 @@ app.whenReady().then(async () => {
     }
   }
 
-  /* Задачи автозапуска, созданные до 1.6.3, ведут в путь с лишними слэшами и
-     не срабатывают. Пересоздаём задачу при каждом запуске с правами — это же
-     держит путь верным, если Prism переустановили в другой каталог. */
-  if (IS_WIN && st.autoStart && st.startElevated && elevated) {
-    void setAutoStart(true, true, st.startMinimized).catch((e) => console.error('[main] задача автозапуска:', e))
+  if (IS_WIN && app.isPackaged) {
+    void setAutoStart(st.autoStart, st.startMinimized).catch((e) => {
+      console.error('[main] задача автозапуска:', e)
+      void dialog.showMessageBox({ type: 'warning', title: 'Prism', message: 'Не удалось настроить автозапуск Prism', detail: String(e.message ?? e) })
+    })
   }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
     else win?.show()
   })
+}
+
+void app.whenReady().then(start).catch((e) => {
+  console.error('[main] запуск Prism:', e)
+  dialog.showErrorBox('Не удалось запустить Prism', String(e.message ?? e))
+  app.exit(1)
 })
 
 app.on('window-all-closed', () => {

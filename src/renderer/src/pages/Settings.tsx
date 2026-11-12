@@ -493,24 +493,11 @@ export default function SettingsPage(): JSX.Element {
       {/* ─── Приложение ─── */}
       <div className="section-title">Приложение</div>
       <div className="card pad">
-        <Setting title="Запускать вместе с Windows">
-          <Switch on={s.autoStart} onChange={(v) => patchSettings({ autoStart: v })} />
-        </Setting>
-
         <Setting
-          title="Автозапуск с правами администратора"
-          hint="Создаёт задачу в планировщике, чтобы TUN поднимался при входе в систему без окна UAC. Требует подтверждения один раз."
+          title="Запускать при входе в систему"
+          hint={info?.isWindows ? 'Prism запускается с правами администратора через Планировщик заданий, без запроса UAC при входе.' : undefined}
         >
-          <Switch
-            on={s.startElevated}
-            disabled={!s.autoStart}
-            onChange={async (v) => {
-              await patchSettings({ startElevated: v })
-              const r = await window.prism.system.setAutoStart(s.autoStart, v)
-              if (!r.ok) toast('error', r.error ?? 'Не удалось настроить автозапуск')
-              else if (v) toast('ok', 'Задача автозапуска создана')
-            }}
-          />
+          <Switch on={s.autoStart} onChange={(v) => patchSettings({ autoStart: v })} />
         </Setting>
 
         <Setting title="Подключаться при запуске">

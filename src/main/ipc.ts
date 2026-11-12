@@ -6,7 +6,7 @@ import { randomBytes } from 'node:crypto'
 import { basename, join, dirname } from 'node:path'
 import type { AppRule, ConnectionItem, RoutingRule, Settings, Subscription, ZapretCheck, ZapretConfig, ZapretTestKind } from '@shared/types'
 import { buildConfig } from '@shared/config-builder'
-import { DEFAULT_ENABLED_PRESETS, DEFAULT_SETTINGS } from '@shared/defaults'
+import { DEFAULT_ENABLED_PRESETS } from '@shared/defaults'
 import { uid } from '@shared/parsers'
 import { GAME_FILTERS, IPSET_MODES, cleanList } from '@shared/zapret'
 import { store, paths } from './store'
@@ -18,7 +18,6 @@ import { applyFix, clearDiscordCache, hostsApply, hostsInfo, hostsRemove, resetN
 import {
   clearSystemProxy,
   getAppIcon,
-  hasAutoStartTask,
   isElevated,
   IS_WIN,
   listRunningApps,
@@ -29,6 +28,7 @@ import {
 const exec = promisify(execFile)
 
 let win: BrowserWindow | null = null
+let elevationPending = false
 export function setMainWindow(w: BrowserWindow): void {
   win = w
 }
@@ -232,8 +232,7 @@ export function registerIpc(): void {
       isWindows: IS_WIN,
       appVersion: app.getVersion(),
       seenVersion: store.get().seenVersion,
-      coreVersion,
-      autoStartTask: await hasAutoStartTask()
+      coreVersion
     }
   })
 
@@ -242,12 +241,18 @@ export function registerIpc(): void {
   h('core:stop', () => core.stop())
   h('core:restart', () => core.restart())
   h('core:elevate', async () => {
-    const ok = await relaunchElevated()
-    /* На Windows права получают перезапуском себя через UAC, поэтому старый
-       процесс обязан уйти. На macOS «повысить права» — это поставить демон,
-       и выходить не нужно: приложение просто начинает его видеть. */
-    if (ok && IS_WIN) setTimeout(() => app.exit(0), 400)
-    return ok
+    if (!IS_WIN) return relaunchElevated()
+    if (elevationPending) return true
+    elevationPending = true
+    try {
+      if (await isElevated()) return true
+      if (!(await relaunchElevated(true))) return false
+      // Новый экземпляр дождётся штатного выхода и освобождения блокировки.
+      setImmediate(() => app.quit())
+      return true
+    } finally {
+      elevationPending = false
+    }
   })
   h('core:closeConnection', (id: string) => (isStr(id) ? core.clash.closeConnection(id) : undefined))
   h('core:closeAllConnections', () => core.clash.closeAllConnections())
@@ -291,20 +296,22 @@ export function registerIpc(): void {
     // startMinimized тоже: флаг --minimized записан в самой задаче автозапуска
     if (
       before.autoStart !== after.autoStart ||
-      before.startElevated !== after.startElevated ||
       before.startMinimized !== after.startMinimized
     ) {
-      await setAutoStart(after.autoStart, after.startElevated, after.startMinimized).catch((e) =>
-        toast('warn', String(e.message ?? e))
+      await setAutoStart(after.autoStart, after.startMinimized).catch((e) =>
+        toast('error', `Не удалось настроить автозапуск Prism: ${e.message ?? e}`)
       )
     }
     return snapshot()
   })
 
   h('settings:reset', async () => {
-    store.setSettings(structuredClone(DEFAULT_SETTINGS))
+    const after = store.resetSettings()
     store.patch({ enabledPresets: [...DEFAULT_ENABLED_PRESETS] })
     pushSnapshot()
+    await setAutoStart(after.autoStart, after.startMinimized).catch((e) =>
+      toast('error', `Не удалось настроить автозапуск Prism: ${e.message ?? e}`)
+    )
     await core.applyIfRunning()
     return snapshot()
   })
@@ -697,14 +704,6 @@ export function registerIpc(): void {
   h('system:resetSystemProxy', async () => {
     await clearSystemProxy(store.get().savedProxy)
     toast('ok', 'Системный прокси сброшен')
-  })
-  h('system:setAutoStart', async (enabled: boolean, elevated: boolean) => {
-    try {
-      await setAutoStart(enabled, elevated, store.get().settings.startMinimized)
-      return { ok: true }
-    } catch (e: any) {
-      return { ok: false, error: String(e.message ?? e) }
-    }
   })
   h('system:openExternal', (url: string) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url)

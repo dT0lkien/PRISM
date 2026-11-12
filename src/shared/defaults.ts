@@ -33,7 +33,6 @@ export const DEFAULT_SETTINGS: Settings = {
   autoStart: false,
   autoUpdate: true,
   autoConnect: false,
-  startElevated: false,
   minimizeToTray: true,
   closeToTray: true,
   startMinimized: false,

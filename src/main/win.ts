@@ -9,7 +9,7 @@
 import { app, nativeImage } from 'electron'
 import { execFile, execFileSync } from 'node:child_process'
 import { promisify } from 'node:util'
-import { basename } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import type { DetectedApp } from '@shared/types'
 import * as mac from './mac'
 
@@ -73,7 +73,7 @@ export async function ps(script: string, timeout = 20000): Promise<string> {
 export async function psUtf8(script: string, timeout = 30000, env?: Record<string, string>): Promise<string> {
   const encoded = Buffer.from(script, 'utf16le').toString('base64')
   const { stdout } = await exec(
-    'powershell.exe',
+    join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
     ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
     { timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024, encoding: 'utf8', env: psEnv(env) }
   )
@@ -85,7 +85,7 @@ export const PS_UTF8 = '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 /* ─────────────────────────── права ─────────────────────────── */
 
-let elevatedCache: boolean | null = null
+let elevatedCheck: Promise<boolean> | undefined
 
 export async function isElevated(): Promise<boolean> {
   /* На macOS «есть права» означает «установлен и отвечает наш демон»: сам по
@@ -97,18 +97,35 @@ export async function isElevated(): Promise<boolean> {
     return info.reachable && info.compatible
   }
   if (!IS_WIN) return true
-  if (elevatedCache !== null) return elevatedCache
-  try {
-    await exec('net', ['session'], { timeout: 8000, windowsHide: true })
-    elevatedCache = true
-  } catch {
-    elevatedCache = false
-  }
-  return elevatedCache
+  // Проверяем токен процесса: net session зависит от службы LanmanServer.
+  elevatedCheck ??= psUtf8(`
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+    $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+  `, 10000).then((out) => out.trim() === 'True')
+  return elevatedCheck
+}
+
+const ELEVATION_ARG = '--prism-elevation='
+const elevationArg = process.argv.find((arg) => arg.startsWith(ELEVATION_ARG))
+export const elevationAttempted = elevationArg !== undefined
+
+export async function waitForPreviousInstance(): Promise<void> {
+  const pid = Number(elevationArg?.slice(ELEVATION_ARG.length))
+  if (!Number.isInteger(pid) || pid <= 0 || pid > 0xffffffff || pid === process.pid) return
+  await psUtf8(`
+    $previous = Get-Process -Id ${pid} -ErrorAction SilentlyContinue
+    if ($previous -and !$previous.WaitForExit(30000)) { exit 1 }
+  `, 35000)
+}
+
+// Start-Process передаёт аргументы одной командной строкой Win32.
+function quoteWindowsArg(arg: string): string {
+  return `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/\\+$/, '$&$&')}"`
 }
 
 /** Перезапуск себя с правами администратора. Возвращает false, если пользователь отказал в UAC. */
-export async function relaunchElevated(extraArgs: string[] = []): Promise<boolean> {
+export async function relaunchElevated(restart = false): Promise<boolean> {
   /* На macOS «повысить права» — это поставить демон. Перезапуск не нужен:
      после установки приложение просто начинает его видеть. */
   if (IS_MAC) {
@@ -117,20 +134,28 @@ export async function relaunchElevated(extraArgs: string[] = []): Promise<boolea
     return r.ok
   }
   if (!IS_WIN) return false
-  const exe = process.execPath
+  const exe = launcher()
   // В деве execPath — это electron.exe, ему нужен путь к приложению первым аргументом
   const args = app.isPackaged ? process.argv.slice(1) : [app.getAppPath(), ...process.argv.slice(2)]
-  const all = [...args, ...extraArgs].filter((a) => a !== '--elevated')
-  all.push('--elevated')
+  const all = args.filter((arg) => !arg.startsWith(ELEVATION_ARG))
+  all.push(`${ELEVATION_ARG}${restart ? process.pid : 0}`)
 
-  const list = all.map((a) => `'${a.replace(/'/g, "''")}'`).join(',')
-  const argPart = all.length ? `-ArgumentList ${list}` : ''
-  try {
-    await ps(`Start-Process -FilePath '${exe.replace(/'/g, "''")}' ${argPart} -Verb RunAs`, 60000)
-    return true
-  } catch {
-    return false // почти всегда — «Нет» в окне UAC
-  }
+  const out = (await psUtf8(`
+    ${PS_UTF8}
+    try {
+      Start-Process -FilePath $env:PRISM_EXE -ArgumentList $env:PRISM_ARGS -WorkingDirectory $env:PRISM_CWD -Verb RunAs -ErrorAction Stop
+      'OK'
+    } catch {
+      $cause = $_.Exception
+      while ($cause -and $cause -isnot [ComponentModel.Win32Exception]) { $cause = $cause.InnerException }
+      if ($cause -and $cause.NativeErrorCode -eq 1223) { 'CANCELLED' }
+      else { $_.Exception.Message }
+    }
+  `, 120000, { PRISM_EXE: exe, PRISM_ARGS: all.map(quoteWindowsArg).join(' '), PRISM_CWD: dirname(exe) })).trim()
+
+  if (out === 'CANCELLED') return false
+  if (out !== 'OK') throw new Error(out || 'Windows не запустила Prism с повышенными правами')
+  return true
 }
 
 /* ─────────────────────────── системный прокси ─────────────────────────── */
@@ -216,30 +241,34 @@ export async function clearSystemProxy(restore?: ProxyState): Promise<void> {
 
 /* ─────────────────────────── автозапуск ─────────────────────────── */
 
-/* Задачу собираем через PowerShell, а не `schtasks /tr`. У schtasks путь и
-   аргументы едут одной строкой, и кавычки вокруг пути в 1.0–1.6 экранировались
-   «для cmd» — \" — хотя execFile экранирует их сам. Итог: в задаче оказывался
-   путь \"C:\…\Prism.exe\" с лишними слэшами, и автозапуск молча не работал.
-   Здесь путь и аргументы — отдельные поля, а в скрипт они приходят переменными
-   окружения, так что кавычить нечего.
-   Заодно — настройки, которые schtasks ставит по умолчанию и которые Prism
-   не подходят: не запускаться от батареи, гасить при переходе на батарею,
-   убивать через 72 часа работы и пониженный приоритет (его наследует ядро).
-   И триггер — вход именно этого пользователя, а не любого. */
+/* Путь и аргументы хранятся в разных полях действия. Задача привязана
+   к пользователю и работает от батареи без ограничения времени. */
 const TASK_SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
+${PS_UTF8}
 $result = 'OK'
 try {
-  $user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-  $action = New-ScheduledTaskAction -Execute ('"' + $env:PRISM_EXE + '"') -Argument $env:PRISM_ARGS
-  $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
-  $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest
-  $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -Priority 4
-  Register-ScheduledTask -TaskName $env:PRISM_TASK -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+  $user = [Security.Principal.WindowsIdentity]::GetCurrent()
+  $sid = $user.User.Value
+  $taskName = $env:PRISM_TASK + '-' + $sid
+  $tasks = Get-ScheduledTask | Where-Object { $_.TaskPath -eq '\' }
+  if ($env:PRISM_ENABLED -eq '1') {
+    $actionArgs = @{ Execute = $env:PRISM_EXE; WorkingDirectory = $env:PRISM_CWD }
+    if ($env:PRISM_MINIMIZED -eq '1') { $actionArgs.Argument = '--minimized' }
+    $action = New-ScheduledTaskAction @actionArgs
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user.Name
+    $principal = New-ScheduledTaskPrincipal -UserId $sid -LogonType Interactive -RunLevel Highest
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -Priority 4
+    Register-ScheduledTask -TaskPath '\' -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+  } else {
+    $tasks | Where-Object { $_.TaskName -eq $taskName } | Unregister-ScheduledTask -Confirm:$false
+  }
+  $tasks | Where-Object {
+    $_.TaskName -eq $env:PRISM_TASK -and $_.Principal.UserId -in @($sid, $user.Name)
+  } | Unregister-ScheduledTask -Confirm:$false
 } catch {
   $result = 'ERR:' + $_.Exception.Message
 }
-${PS_UTF8}
 Write-Output $result
 `
 
@@ -248,48 +277,33 @@ Write-Output $result
    этого файла уже нет. Настоящий exe она сообщает переменной окружения. */
 const launcher = (): string => process.env.PORTABLE_EXECUTABLE_FILE || process.execPath
 
-export async function setAutoStart(enabled: boolean, elevated: boolean, minimized: boolean): Promise<void> {
+let autoStartUpdate = Promise.resolve()
+
+export async function setAutoStart(enabled: boolean, minimized: boolean): Promise<void> {
   if (!IS_WIN) {
     app.setLoginItemSettings({ openAtLogin: enabled })
     return
   }
-  // Обычный автозапуск через реестр — снимаем всегда, чтобы не было двух записей
-  app.setLoginItemSettings({ openAtLogin: enabled && !elevated, path: launcher(), args: minimized ? ['--minimized'] : [] })
+  if (!app.isPackaged) return
 
-  if (elevated && enabled) {
-    // Задача планировщика с наивысшими правами: автозапуск без окна UAC
-    const args = [...(minimized ? ['--minimized'] : []), '--elevated'].join(' ')
-    let out: string
-    try {
-      out = (await psUtf8(TASK_SCRIPT, 30000, { PRISM_EXE: launcher(), PRISM_ARGS: args, PRISM_TASK: TASK_NAME })).trim()
-    } catch {
-      out = 'ERR:'
-    }
+  // Настройки могут измениться, пока ещё применяется задача с запуска приложения.
+  const update = autoStartUpdate.then(async () => {
+    const exe = launcher()
+    const out = (await psUtf8(TASK_SCRIPT, 30000, {
+      PRISM_EXE: exe,
+      PRISM_CWD: dirname(exe),
+      PRISM_ENABLED: enabled ? '1' : '0',
+      PRISM_MINIMIZED: minimized ? '1' : '0',
+      PRISM_TASK: TASK_NAME
+    })).trim()
     if (out !== 'OK') {
-      const why = out.replace(/^ERR:/, '').trim()
-      throw new Error(
-        !why || /access|доступ/i.test(why)
-          ? 'Не удалось создать задачу автозапуска — нужны права администратора'
-          : `Не удалось создать задачу автозапуска: ${why}`
-      )
+      throw new Error(out.replace(/^ERR:/, '').trim() || 'Планировщик заданий не подтвердил изменение')
     }
-  } else {
-    try {
-      await exec('schtasks', ['/delete', '/tn', TASK_NAME, '/f'], { timeout: 20000, windowsHide: true })
-    } catch {
-      /* задачи не было */
-    }
-  }
-}
-
-export async function hasAutoStartTask(): Promise<boolean> {
-  if (!IS_WIN) return false
-  try {
-    await exec('schtasks', ['/query', '/tn', TASK_NAME], { timeout: 10000, windowsHide: true })
-    return true
-  } catch {
-    return false
-  }
+    // Удаляем запись, созданную старыми версиями через реестр.
+    app.setLoginItemSettings({ openAtLogin: false })
+  })
+  autoStartUpdate = update.catch(() => undefined)
+  await update
 }
 
 /* ─────────────────────────── приложения ─────────────────────────── */
