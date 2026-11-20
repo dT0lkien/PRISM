@@ -24,6 +24,18 @@ export interface BuildContext {
   clashSecret: string
 }
 
+export function outboundTags(nodes: ServerNode[]): string[] {
+  const seen = new Set([TAG_PROXY, TAG_DIRECT, TAG_AUTO])
+  return nodes.map((node) => {
+    const base = node.name?.trim() || `${node.server}:${node.port}`
+    let tag = base
+    let suffix = 2
+    while (seen.has(tag)) tag = `${base} (${suffix++})`
+    seen.add(tag)
+    return tag
+  })
+}
+
 type Json = Record<string, any>
 
 const drop = <T extends Json>(o: T): T => {
@@ -304,19 +316,8 @@ export function buildConfig(ctx: BuildContext): Json {
   })
 
   /* ── Outbounds ── */
-  const nodeOutbounds: Json[] = []
-  const nodeTags: string[] = []
-  const seen = new Set<string>(android ? [TAG_PROXY, TAG_DIRECT, TAG_AUTO] : [])
-  for (const n of ctx.nodes) {
-    let tag = n.name?.trim() || `${n.server}:${n.port}`
-    // Теги обязаны быть уникальными
-    let i = 2
-    const base = tag
-    while (seen.has(tag)) tag = `${base} (${i++})`
-    seen.add(tag)
-    nodeTags.push(tag)
-    nodeOutbounds.push({ ...n.outbound, tag })
-  }
+  const nodeTags = outboundTags(ctx.nodes)
+  const nodeOutbounds = ctx.nodes.map((node, index) => ({ ...node.outbound, tag: nodeTags[index] }))
 
   const activeIdx = ctx.nodes.findIndex((n) => n.id === ctx.activeNodeId)
   const defaultTag =

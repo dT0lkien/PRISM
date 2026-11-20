@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useState } from 'react'
 import {
   AlertTriangle,
@@ -160,7 +161,11 @@ const RELEASES_URL = 'https://github.com/dT0lkien/prism-vpn/releases/latest'
 
 /** Блок состояния обновления: у каждого статуса своё действие */
 function UpdateSection(): JSX.Element {
-  const { update, info, toast } = useStore()
+  const { update, info, toast } = useStore(useShallow((s) => ({
+    update: s.update,
+    info: s.info,
+    toast: s.toast
+  })))
   const [busy, setBusy] = useState(false)
 
   const run = async (fn: () => Promise<unknown>): Promise<void> => {
@@ -296,7 +301,13 @@ function stripHtml(s: string): string {
 }
 
 export default function SettingsPage(): JSX.Element {
-  const { snap, patchSettings, info, toast, core } = useStore()
+  const { snap, patchSettings, info, toast, core } = useStore(useShallow((s) => ({
+    snap: s.snap,
+    patchSettings: s.patchSettings,
+    info: s.info,
+    toast: s.toast,
+    core: s.core
+  })))
   const s = snap.settings
   const [cfgOpen, setCfgOpen] = useState(false)
   const [cfg, setCfg] = useState('')

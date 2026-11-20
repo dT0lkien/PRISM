@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -18,7 +19,12 @@ import { useStore } from '../store'
 import { ActionSeg, Empty, Modal, Switch, spring } from '../ui'
 
 export default function Apps(): JSX.Element {
-  const { snap, setAppRules, connections, toast } = useStore()
+  const { snap, setAppRules, connections, toast } = useStore(useShallow((s) => ({
+    snap: s.snap,
+    setAppRules: s.setAppRules,
+    connections: s.connections,
+    toast: s.toast
+  })))
   const [open, setOpen] = useState(false)
   const rules = snap.appRules
 
@@ -171,7 +177,7 @@ function AddAppsModal({
   onAdd: (a: { exe: string; name: string; path?: string; icon?: string; action?: RuleAction }[]) => void
   existing: AppRule[]
 }): JSX.Element {
-  const { connections } = useStore()
+  const connections = useStore((s) => s.connections)
   const [tab, setTab] = useState<'running' | 'suggested' | 'manual'>('running')
   const [apps, setApps] = useState<DetectedApp[]>([])
   const [loading, setLoading] = useState(false)

@@ -6,11 +6,13 @@
      --rules  заодно обновить списки маршрутизации (geosite/geoip) */
 
 import { inflateRawSync, gunzipSync } from 'node:zlib'
-import { existsSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 
-const SING_BOX = '1.13.15'
+const SING_BOX = '1.14.4'
+// Бинарник 1.14.4 для Apple Silicon требует macOS 26.
+const MAC_CORE = '1.13.15'
 const WINTUN = '0.14.1'
 
 /* SHA-256 архивов. Ядро едет в каждый релиз и работает с правами
@@ -20,11 +22,11 @@ const WINTUN = '0.14.1'
    2026-09-23 обе сверены со скачанными файлами. Новая версия ядра — новые
    суммы здесь, иначе скрипт откажется работать. */
 const SHA256 = {
-  [`sing-box-${SING_BOX}-windows-amd64.zip`]: '599b296f6e57511d36d2a6f3011aed1a86fa98418578bbb06bd6dc241b5d8877',
-  [`sing-box-${SING_BOX}-darwin-arm64.tar.gz`]: '3452d866834c9572389e5ca73e60d4ee45a7d5b79332188c9a9e533c5fd40a6d',
-  [`sing-box-${SING_BOX}-darwin-amd64.tar.gz`]: '817e04f90f941b718fedd965ff05bfe72abfcc62952888b01751a6dec5547e14',
-  [`sing-box-${SING_BOX}-linux-amd64.tar.gz`]: 'a3a3ff223b23c3f4731d0a17cb0ef94c97ce257c70721a5b07dc7ca079203c9f',
-  [`sing-box-${SING_BOX}-linux-arm64.tar.gz`]: 'f0810bbb5722ae36635687c421019defcc8b328d31a0b3c287901f331747ca93',
+  [`sing-box-${SING_BOX}-windows-amd64.zip`]: '99185d75d314a07dbba4a130c8ad986cbeb629a07927975636b341ca61f991df',
+  [`sing-box-${MAC_CORE}-darwin-arm64.tar.gz`]: '3452d866834c9572389e5ca73e60d4ee45a7d5b79332188c9a9e533c5fd40a6d',
+  [`sing-box-${MAC_CORE}-darwin-amd64.tar.gz`]: '817e04f90f941b718fedd965ff05bfe72abfcc62952888b01751a6dec5547e14',
+  [`sing-box-${SING_BOX}-linux-amd64.tar.gz`]: '699a1b510aa4396b2176d32d1181920399ebf1e267835da6f3b598d0f7c24968',
+  [`sing-box-${SING_BOX}-linux-arm64.tar.gz`]: '436441f76ee2f7fe21b5b2d426d3cb261a480455a704865789ad533e4273ec26',
   [`wintun-${WINTUN}.zip`]: '07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51'
 }
 
@@ -114,9 +116,14 @@ function save(dir, name, data, exe = false) {
 
 /* ─────────── ядро для Windows ─────────── */
 
+function cachedVersion(dir, version) {
+  const marker = join(dir, '.core-version')
+  return existsSync(marker) && readFileSync(marker, 'utf8') === version
+}
+
 async function fetchWindows() {
   const dir = join(ROOT, 'resources/core/win')
-  if (!force && existsSync(join(dir, 'sing-box.exe')) && existsSync(join(dir, 'wintun.dll'))) {
+  if (!force && cachedVersion(dir, SING_BOX) && existsSync(join(dir, 'sing-box.exe')) && existsSync(join(dir, 'wintun.dll'))) {
     console.log('▸ Ядро для Windows уже на месте (--force чтобы перекачать)')
     return
   }
@@ -145,6 +152,7 @@ async function fetchWindows() {
   const dll = wt['wintun/bin/amd64/wintun.dll']
   if (!dll) throw new Error('в архиве wintun нет сборки amd64')
   save(dir, 'wintun.dll', dll)
+  writeFileSync(join(dir, '.core-version'), SING_BOX)
   if (wt['wintun/LICENSE.txt']) save(dir, 'LICENSE-wintun.txt', wt['wintun/LICENSE.txt'])
 }
 
@@ -153,31 +161,26 @@ async function fetchWindows() {
 async function fetchHost() {
   if (process.platform === 'win32') return
   const dir = join(ROOT, 'resources/core/mac')
-  if (!force && existsSync(join(dir, 'sing-box'))) {
+  const version = process.platform === 'darwin' ? MAC_CORE : SING_BOX
+  if (!force && cachedVersion(dir, version) && existsSync(join(dir, 'sing-box'))) {
     console.log('▸ Ядро для текущей системы уже на месте')
     return
   }
   const os = process.platform === 'darwin' ? 'darwin' : 'linux'
   const arch = process.arch === 'arm64' ? 'arm64' : 'amd64'
-  console.log(`▸ sing-box ${SING_BOX} для ${os}-${arch} (для локальных тестов)`)
-  try {
-    const files = untar(
-      gunzipSync(
-        await getPinned(
-          `https://github.com/SagerNet/sing-box/releases/download/v${SING_BOX}/sing-box-${SING_BOX}-${os}-${arch}.tar.gz`
-        )
-      ),
-      (n) => n.endsWith('/sing-box')
-    )
-    const bin = pick(files, '/sing-box')
-    if (bin) save(dir, 'sing-box', bin, true)
-    else console.log('  ⚠ в архиве нет бинарника')
-  } catch (e) {
-    // Подмену не прощаем: это ядро уезжает и в сборку для macOS
-    if (/SHA-256/.test(e.message)) throw e
-    console.log(`  ⚠ не удалось: ${e.message}`)
-    console.log('    тесты run-validate и run-e2e без него не запустятся')
-  }
+  console.log(`▸ sing-box ${version} для ${os}-${arch} (для локальных тестов)`)
+  const files = untar(
+    gunzipSync(
+      await getPinned(
+        `https://github.com/SagerNet/sing-box/releases/download/v${version}/sing-box-${version}-${os}-${arch}.tar.gz`
+      )
+    ),
+    (n) => n.endsWith('/sing-box')
+  )
+  const bin = pick(files, '/sing-box')
+  if (!bin) throw new Error('в архиве нет бинарника')
+  save(dir, 'sing-box', bin, true)
+  writeFileSync(join(dir, '.core-version'), version)
 }
 
 /* ─────────── списки маршрутизации ─────────── */

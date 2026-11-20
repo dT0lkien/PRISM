@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import * as Icons from 'lucide-react'
@@ -43,7 +44,11 @@ const MATCHER_HINTS: Partial<Record<MatcherKind, string>> = {
 }
 
 export default function Routing(): JSX.Element {
-  const { snap, setPresets, setCustomRules } = useStore()
+  const { snap, setPresets, setCustomRules } = useStore(useShallow((s) => ({
+    snap: s.snap,
+    setPresets: s.setPresets,
+    setCustomRules: s.setCustomRules
+  })))
   const [editing, setEditing] = useState<RoutingRule | null>(null)
   const [dragIdx, setDragIdx] = useState<number | null>(null)
 

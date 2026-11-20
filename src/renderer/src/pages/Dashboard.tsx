@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
@@ -28,7 +29,20 @@ const ROUTING_LABELS: Record<RoutingMode, { label: string; hint: string }> = {
 }
 
 export default function Dashboard(): JSX.Element {
-  const { core, snap, traffic, totals, session, toggle, busy, patchSettings, setPage, info, zapret, toast } = useStore()
+  const { core, snap, traffic, totals, session, toggle, busy, patchSettings, setPage, info, zapret, toast } = useStore(useShallow((s) => ({
+    core: s.core,
+    snap: s.snap,
+    traffic: s.traffic,
+    totals: s.totals,
+    session: s.session,
+    toggle: s.toggle,
+    busy: s.busy,
+    patchSettings: s.patchSettings,
+    setPage: s.setPage,
+    info: s.info,
+    zapret: s.zapret,
+    toast: s.toast
+  })))
   const [uptime, setUptime] = useState(0)
   const [elevAsk, setElevAsk] = useState(false)
 

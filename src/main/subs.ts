@@ -6,7 +6,7 @@ import type { ImportResult, ServerNode, Subscription } from '@shared/types'
 
 export { parseSubscriptionBody } from '@shared/subscriptions'
 
-const UA = 'sing-box/1.13.15 (Prism)'
+const UA = `sing-box/${process.platform === 'darwin' ? '1.13.15' : '1.14.4'} (Prism)`
 
 export interface FetchedSub {
   nodes: ServerNode[]

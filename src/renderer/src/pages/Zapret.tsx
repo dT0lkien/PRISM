@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
@@ -128,7 +129,15 @@ export default function ZapretPage(): JSX.Element {
 }
 
 function TelegramVpn(): JSX.Element {
-  const { snap, busy, setPage, setPresets, patchSettings, connect, toast } = useStore()
+  const { snap, busy, setPage, setPresets, patchSettings, connect, toast } = useStore(useShallow((s) => ({
+    snap: s.snap,
+    busy: s.busy,
+    setPage: s.setPage,
+    setPresets: s.setPresets,
+    patchSettings: s.patchSettings,
+    connect: s.connect,
+    toast: s.toast
+  })))
   const [working, setWorking] = useState(false)
   const enable = async (): Promise<void> => {
     if (!snap.nodes.length || !snap.activeNodeId) { setPage('servers'); return }

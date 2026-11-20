@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -18,7 +19,12 @@ import { Empty, Modal, Ping, Switch, spring } from '../ui'
 import type { ServerNode, Subscription } from '@shared/types'
 
 export default function Servers(): JSX.Element {
-  const { snap, setSnap, toast, core } = useStore()
+  const { snap, setSnap, toast, core } = useStore(useShallow((s) => ({
+    snap: s.snap,
+    setSnap: s.setSnap,
+    toast: s.toast,
+    core: s.core
+  })))
   const [q, setQ] = useState('')
   const [subscription, setSubscription] = useState('all')
   const [sort, setSort] = useState('original')
@@ -46,7 +52,10 @@ export default function Servers(): JSX.Element {
   }, [snap.nodes, snap.subscriptions, q, subscription, sort])
 
   const select = async (n: ServerNode): Promise<void> => {
-    await window.prism.nodes.select(n.id)
+    if (!(await window.prism.nodes.select(n.id))) {
+      toast('error', useStore.getState().core.error || 'Не удалось переключить сервер')
+      return
+    }
     setSnap({ ...snap, activeNodeId: n.id })
     if (core.status === 'running') toast('ok', `Переключено на «${n.name}»`)
   }
@@ -97,7 +106,7 @@ export default function Servers(): JSX.Element {
         </div>
         <button className="btn" onClick={testAll} disabled={testing || !snap.nodes.length}>
           <Zap size={15} className={testing ? 'spin' : ''} />
-          {testing ? 'Проверяю…' : 'Проверить все'}
+          {testing ? 'Проверяю…' : core.status === 'running' ? 'Проверить через прокси' : 'Проверить TCP-порты'}
         </button>
         <button className="btn" onClick={() => setAddOpen(true)}>
           <Link2 size={15} />
@@ -256,7 +265,7 @@ export default function Servers(): JSX.Element {
                 <div className="actions">
                   <button
                     className="btn icon sm ghost"
-                    title="Проверить"
+                    title={core.status === 'running' ? 'Проверить HTTPS через сервер' : 'Проверить доступность TCP-порта'}
                     onClick={(e) => {
                       e.stopPropagation()
                       void window.prism.nodes.measure(n.id)
@@ -387,7 +396,10 @@ export default function Servers(): JSX.Element {
 /* ─────────────── модалки ─────────────── */
 
 function AddLinksModal({ open, onClose }: { open: boolean; onClose: () => void }): JSX.Element {
-  const { setSnap, toast } = useStore()
+  const { setSnap, toast } = useStore(useShallow((s) => ({
+    setSnap: s.setSnap,
+    toast: s.toast
+  })))
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -447,7 +459,10 @@ function AddLinksModal({ open, onClose }: { open: boolean; onClose: () => void }
 }
 
 function AddSubModal({ open, onClose }: { open: boolean; onClose: () => void }): JSX.Element {
-  const { setSnap, toast } = useStore()
+  const { setSnap, toast } = useStore(useShallow((s) => ({
+    setSnap: s.setSnap,
+    toast: s.toast
+  })))
   const [url, setUrl] = useState('')
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
@@ -514,7 +529,7 @@ function AddSubModal({ open, onClose }: { open: boolean; onClose: () => void }):
 }
 
 function RenameModal({ node, onClose }: { node: ServerNode | null; onClose: () => void }): JSX.Element {
-  const { setSnap } = useStore()
+  const setSnap = useStore((s) => s.setSnap)
   const [name, setName] = useState('')
 
   const submit = async (): Promise<void> => {

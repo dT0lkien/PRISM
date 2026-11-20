@@ -180,9 +180,15 @@ async function main(): Promise<void> {
 
   console.log('\n▸ Замер задержки')
   const ms = await core.measure(node.id)
-  // Сервер локальный: TCP-рукопожатие укладывается в доли миллисекунды и даёт 0.
-  // Провал — это -1, то есть «не достучались».
-  ok('задержка получена', ms >= 0, `${ms} мс`)
+  ok('HTTPS через выбранный сервер отвечает', ms > 0, `${ms} мс`)
+  // TCP-порт доступен, но проверка через прокси провалилась.
+  const delay = core.clash.delay
+  try {
+    core.clash.delay = async () => -1
+    ok('ошибка прокси не подменяется TCP-пингом', await core.measure(node.id) === -1)
+  } finally {
+    core.clash.delay = delay
+  }
 
   console.log('\n▸ Остановка')
   await core.stop()

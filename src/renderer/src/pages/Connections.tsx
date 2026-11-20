@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useMemo, useState } from 'react'
 import { Network, Search, XCircle } from 'lucide-react'
 import { bytes, duration, useStore } from '../store'
@@ -6,7 +7,11 @@ import { Empty } from '../ui'
 type Filter = 'all' | 'proxy' | 'direct'
 
 export default function Connections(): JSX.Element {
-  const { connections, core, snap } = useStore()
+  const { connections, core, snap } = useStore(useShallow((s) => ({
+    connections: s.connections,
+    core: s.core,
+    snap: s.snap
+  })))
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
 

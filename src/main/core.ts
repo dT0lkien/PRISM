@@ -7,7 +7,7 @@ import { chmodSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { createConnection } from 'node:net'
 import type { CoreState, ServerNode } from '@shared/types'
-import { buildConfig, TAG_PROXY } from '@shared/config-builder'
+import { buildConfig, outboundTags, TAG_PROXY } from '@shared/config-builder'
 import { store, paths } from './store'
 import { ClashClient } from './clash'
 import { clearSystemProxy, killStrayCores, readSystemProxy, setSystemProxy, isElevated, IS_WIN } from './win'
@@ -23,6 +23,7 @@ const HELPER_PLATFORM = process.platform === 'darwin'
 const exec = promisify(execFile)
 
 export class Core extends EventEmitter {
+  private runtimeTags = new Map<string, string>()
   readonly clash = new ClashClient()
   private proc: ChildProcess | null = null
   /* Соединение с демоном держим открытым всё время работы туннеля: демон
@@ -136,7 +137,16 @@ export class Core extends EventEmitter {
     // default из конфига. Без этого сервер, выбранный при выключенном VPN,
     // молча не применялся: в окне новый, а трафик шёл через прежний.
     const active = d.nodes.find((n) => n.id === d.activeNodeId)
-    if (active) await this.clash.selectNode(TAG_PROXY, this.tagOf(active)).catch(() => {})
+    if (active) {
+      try {
+        await this.clash.selectNode(TAG_PROXY, this.runtimeTags.get(active.id)!)
+      } catch (e) {
+        const error = `Не удалось выбрать сервер «${active.name}»: ${e}`
+        await this.stop(true)
+        this.setState({ status: 'error', error })
+        return { ok: false, error }
+      }
+    }
 
     // 4. Системный прокси
     if (st.captureMode === 'proxy') {
@@ -153,6 +163,12 @@ export class Core extends EventEmitter {
           HELPER_PLATFORM && !elevated
             ? `Системный прокси на macOS ставит привилегированный демон — установите его в настройках. Пока направьте программы в 127.0.0.1:${st.localPort} вручную`
             : `Не удалось прописать системный прокси: ${e}`
+        if (IS_WIN) {
+          await clearSystemProxy(store.get().savedProxy).catch(() => undefined)
+          await this.stop(true)
+          this.setState({ status: 'error', error: hint })
+          return { ok: false, error: hint }
+        }
         this.log(hint, 'warn')
       }
     }
@@ -190,6 +206,8 @@ export class Core extends EventEmitter {
       const out = `${e.stdout ?? ''}${e.stderr ?? ''}`.trim() || String(e.message ?? e)
       throw new Error(`Конфиг не прошёл проверку: ${firstLine(out)}`)
     }
+    const tags = outboundTags(nodes)
+    this.runtimeTags = new Map(nodes.map((node, i) => [node.id, tags[i]]))
     return paths.runtimeConfig
   }
 
@@ -371,30 +389,15 @@ export class Core extends EventEmitter {
 
     if (this.state.status !== 'running') return true
     try {
-      const tag = this.tagOf(node)
+      const tag = this.runtimeTags.get(node.id)
+      if (!tag) return (await this.restart()).ok
       await this.clash.selectNode(TAG_PROXY, tag)
       this.log(`Активный сервер: ${tag}`)
       return true
     } catch {
       // Селектора нет (например, узел добавили после запуска) — перезапускаемся
-      await this.restart()
-      return true
+      return (await this.restart()).ok
     }
-  }
-
-  /** Тег узла в конфиге строится так же, как в config-builder */
-  private tagOf(node: ServerNode): string {
-    const d = store.get()
-    const seen = new Set<string>()
-    for (const n of d.nodes) {
-      let tag = n.name?.trim() || `${n.server}:${n.port}`
-      let i = 2
-      const base = tag
-      while (seen.has(tag)) tag = `${base} (${i++})`
-      seen.add(tag)
-      if (n.id === node.id) return tag
-    }
-    return node.name
   }
 
   async measure(nodeId: string): Promise<number> {
@@ -402,8 +405,8 @@ export class Core extends EventEmitter {
     const node = d.nodes.find((n) => n.id === nodeId)
     if (!node) return -1
     if (this.state.status === 'running') {
-      const delay = await this.clash.delay(this.tagOf(node))
-      if (delay > 0) return delay
+      const tag = this.runtimeTags.get(node.id)
+      return tag ? this.clash.delay(tag) : -1
     }
     return tcpPing(node.server, node.port)
   }

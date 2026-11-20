@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -56,7 +57,19 @@ const PAGES: Record<Page, () => JSX.Element> = {
 }
 
 export default function App(): JSX.Element {
-  const { ready, page, setPage, init, core, snap, toasts, dropToast, maximized, connections, zapret } = useStore()
+  const { ready, page, setPage, init, core, snap, toasts, dropToast, maximized, connectionCount, zapret } = useStore(useShallow((s) => ({
+    ready: s.ready,
+    page: s.page,
+    setPage: s.setPage,
+    init: s.init,
+    core: s.core,
+    snap: s.snap,
+    toasts: s.toasts,
+    dropToast: s.dropToast,
+    maximized: s.maximized,
+    connectionCount: s.connections.length,
+    zapret: s.zapret
+  })))
 
   useEffect(() => {
     void init()
@@ -144,8 +157,8 @@ export default function App(): JSX.Element {
             const badge =
               n.id === 'servers' && snap.nodes.length
                 ? String(snap.nodes.length)
-                : n.id === 'connections' && connections.length
-                  ? String(connections.length)
+                : n.id === 'connections' && connectionCount
+                  ? String(connectionCount)
                   : n.id === 'apps' && snap.appRules.length
                     ? String(snap.appRules.length)
                     : null

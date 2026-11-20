@@ -72,6 +72,7 @@ const toast = (kind: 'ok' | 'warn' | 'error', text: string) => send('evt:toast',
 /* ─────────────────────── события ядра → окно ─────────────────────── */
 
 let logSeq = 0
+let lastTotalsSave = 0
 let lastConnPush = 0
 
 export function wireCoreEvents(): void {
@@ -91,14 +92,17 @@ export function wireCoreEvents(): void {
     const d = store.get()
     d.totals.up += t.up
     d.totals.down += t.down
-    store.save()
-    send('evt:traffic', { ...t, totalUp: d.totals.up, totalDown: d.totals.down })
+    if (Date.now() - lastTotalsSave >= 30000) {
+      store.save()
+      lastTotalsSave = Date.now()
+    }
+    if (win?.isVisible()) send('evt:traffic', { ...t, totalUp: d.totals.up, totalDown: d.totals.down })
   })
 
   core.clash.on('connections', (c: { items: ConnectionItem[]; up: number; down: number }) => {
     // Список соединений приходит раз в секунду и бывает объёмным — отдаём не чаще
     const now = Date.now()
-    if (now - lastConnPush < 900) return
+    if (!win?.isVisible() || now - lastConnPush < 900) return
     lastConnPush = now
     send('evt:connections', c.items.slice(0, 400))
   })
@@ -365,8 +369,10 @@ export function registerIpc(): void {
 
   h('nodes:rename', (id: string, name: string) => {
     const n = isStr(id) ? store.get().nodes.find((x) => x.id === id) : undefined
-    if (n && isStr(name)) n.name = name.trim() || n.name
-    store.save()
+    if (n && isStr(name)) {
+      n.name = name.trim() || n.name
+      store.save(true)
+    }
     pushSnapshot()
     return snapshot()
   })
@@ -471,7 +477,7 @@ export function registerIpc(): void {
         s.intervalHours = patch.intervalHours as number
       }
     }
-    store.save()
+    store.save(true)
     pushSnapshot()
     return snapshot()
   })

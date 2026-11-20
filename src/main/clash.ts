@@ -17,7 +17,7 @@ export class ClashClient extends EventEmitter {
   private secret = ''
   private sockets: WebSocket[] = []
   private stopped = true
-  private retry: NodeJS.Timeout | null = null
+  private retries = new Set<NodeJS.Timeout>()
 
   get base(): string {
     return `http://127.0.0.1:${this.port}`
@@ -37,10 +37,8 @@ export class ClashClient extends EventEmitter {
 
   stop(): void {
     this.stopped = true
-    if (this.retry) {
-      clearTimeout(this.retry)
-      this.retry = null
-    }
+    for (const timer of this.retries) clearTimeout(timer)
+    this.retries.clear()
     for (const s of this.sockets) {
       try {
         s.removeAllListeners()
@@ -58,7 +56,6 @@ export class ClashClient extends EventEmitter {
       if (m?.payload) this.emit('log', { level: String(m.type ?? 'info'), message: String(m.payload) })
     })
     this.open('connections', (m) => this.emit('connections', normalizeConnections(m)))
-    this.open('memory', (m) => this.emit('memory', { inuse: m.inuse ?? 0 }))
   }
 
   private open(path: string, onMessage: (m: any) => void): void {
@@ -92,7 +89,11 @@ export class ClashClient extends EventEmitter {
 
   private scheduleRetry(path: string, onMessage: (m: any) => void): void {
     if (this.stopped) return
-    setTimeout(() => this.open(path, onMessage), 1500)
+    const timer = setTimeout(() => {
+      this.retries.delete(timer)
+      this.open(path, onMessage)
+    }, 1500)
+    this.retries.add(timer)
   }
 
   /* ─────────── REST ─────────── */

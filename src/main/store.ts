@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
+import { chmodSync, closeSync, fsyncSync, mkdirSync, openSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import type { AppRule, RoutingRule, ServerNode, Settings, Subscription, ZapretConfig, ZapretTestSummary } from '@shared/types'
@@ -46,7 +46,7 @@ export const paths = {
   get config() {
     return join(dataDir(), 'store.json')
   },
-  /** Предыдущая удачная версия — страховка от порчи основного файла */
+  /** Резервный снимок настроек и серверов */
   get configBackup() {
     return join(dataDir(), 'store.backup.json')
   },
@@ -119,6 +119,27 @@ function reconcile(saved: Partial<StoreData>): StoreData {
   }
 }
 
+function writeSnapshot(file: string, json: string): void {
+  const temp = `${file}.tmp`
+  const fd = openSync(temp, 'w', FILE_MODE)
+  try {
+    chmodSync(temp, FILE_MODE)
+    writeFileSync(fd, json, 'utf8')
+    fsyncSync(fd)
+  } finally {
+    closeSync(fd)
+  }
+  renameSync(temp, file)
+  if (process.platform !== 'win32') {
+    const dir = openSync(dataDir(), 'r')
+    try {
+      fsyncSync(dir)
+    } finally {
+      closeSync(dir)
+    }
+  }
+}
+
 class Store {
   private data: StoreData = defaults()
   private saveTimer: NodeJS.Timeout | null = null
@@ -126,38 +147,44 @@ class Store {
   loadWarning: string | null = null
 
   load(): StoreData {
-    if (!existsSync(dataDir())) mkdirSync(dataDir(), { recursive: true, mode: DIR_MODE })
-    const read = (file: string): StoreData => reconcile(JSON.parse(readFileSync(file, 'utf8')))
-
-    try {
-      if (existsSync(paths.config)) {
-        this.data = read(paths.config)
-        return this.data
-      }
-    } catch (e) {
-      console.error('[store] основной файл настроек не читается:', e)
-      // Не затираем битый файл: сохраняем его — вдруг данные ещё можно достать
-      const dead = join(dataDir(), `store.corrupt-${Date.now()}.json`)
+    mkdirSync(dataDir(), { recursive: true, mode: DIR_MODE })
+    this.loadWarning = null
+    const damaged: string[] = []
+    for (const file of [paths.config, paths.configBackup, `${paths.config}.tmp`, `${paths.configBackup}.tmp`]) {
+      let raw: string
       try {
-        renameSync(paths.config, dead)
-        // В битой копии лежат те же секреты, что и в основном файле
-        chmodSync(dead, FILE_MODE)
-      } catch {
-        /* не вышло — переживём */
+        raw = readFileSync(file, 'utf8')
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === 'ENOENT') continue
+        throw e
       }
       try {
-        if (existsSync(paths.configBackup)) {
-          this.data = read(paths.configBackup)
-          this.loadWarning = 'Файл настроек был повреждён — данные восстановлены из резервной копии'
-          this.save(true)
-          return this.data
+        const saved = JSON.parse(raw)
+        if (!saved?.settings || typeof saved.settings !== 'object' ||
+            Array.isArray(saved.settings) || !Array.isArray(saved.nodes)) {
+          throw new Error('В файле отсутствуют настройки или список серверов')
         }
-      } catch (e2) {
-        console.error('[store] резервная копия тоже не читается:', e2)
+        this.data = reconcile(saved)
+      } catch (e) {
+        console.error('[store] повреждённый снимок:', basename(file), e)
+        const dead = join(dataDir(), `store.corrupt-${Date.now()}-${basename(file)}`)
+        renameSync(file, dead)
+        chmodSync(dead, FILE_MODE)
+        damaged.push(basename(dead))
+        continue
       }
-      this.loadWarning = `Файл настроек был повреждён и восстановить его не вышло. Копия сохранена как ${basename(dead)}`
+      if (file !== paths.config) {
+        // Сохраняем восстановленный временный файл, пока создаётся новая копия.
+        if (file.endsWith('.tmp')) renameSync(file, paths.config)
+        this.loadWarning = 'Основной файл настроек недоступен. Настройки и серверы восстановлены из сохранённой копии.'
+        this.save(true)
+      }
+      return this.data
     }
 
+    if (damaged.length) {
+      this.loadWarning = `Не удалось восстановить настройки. Повреждённые файлы сохранены: ${damaged.join(', ')}`
+    }
     this.data = defaults()
     return this.data
   }
@@ -168,7 +195,7 @@ class Store {
 
   patch(p: Partial<StoreData>): StoreData {
     this.data = { ...this.data, ...p }
-    this.save()
+    this.save(true)
     return this.data
   }
 
@@ -179,7 +206,7 @@ class Store {
       tun: { ...this.data.settings.tun, ...(s.tun ?? {}) },
       dns: { ...this.data.settings.dns, ...(s.dns ?? {}) }
     }
-    this.save()
+    this.save(true)
     return this.data.settings
   }
 
@@ -193,25 +220,10 @@ class Store {
     const write = () => {
       this.saveTimer = null
       try {
-        if (!existsSync(dataDir())) mkdirSync(dataDir(), { recursive: true, mode: DIR_MODE })
+        mkdirSync(dataDir(), { recursive: true, mode: DIR_MODE })
         const json = JSON.stringify(this.data, null, 2)
-        const tmp = `${paths.config}.tmp`
-        /* Права ставим временному файлу: renameSync переносит inode вместе с
-           режимом, так что store.json получает 0600 и сам чинится у тех,
-           у кого он остался с 0644 от прошлых версий. */
-        writeFileSync(tmp, json, { encoding: 'utf8', mode: FILE_MODE })
-        // Предыдущую удачную версию оставляем про запас — на случай,
-        // если основной файл переживёт неудачное выключение хуже нас
-        try {
-          if (existsSync(paths.config)) {
-            copyFileSync(paths.config, paths.configBackup)
-            // copyFileSync не трогает права уже существующего файла — ставим явно
-            chmodSync(paths.configBackup, FILE_MODE)
-          }
-        } catch {
-          /* без резервной копии тоже живём */
-        }
-        renameSync(tmp, paths.config)
+        writeSnapshot(paths.config, json)
+        writeSnapshot(paths.configBackup, json)
       } catch (e) {
         console.error('[store] ошибка записи:', e)
       }

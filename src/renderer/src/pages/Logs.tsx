@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDownToLine, Copy, Pause, Play, Search, Trash2 } from 'lucide-react'
 import { timeOf, useStore } from '../store'
@@ -13,7 +14,13 @@ const LEVEL_LABEL: Record<Level, string> = {
 }
 
 export default function Logs(): JSX.Element {
-  const { logs, clearLogs, logPaused, setLogPaused, toast } = useStore()
+  const { logs, clearLogs, logPaused, setLogPaused, toast } = useStore(useShallow((s) => ({
+    logs: s.logs,
+    clearLogs: s.clearLogs,
+    logPaused: s.logPaused,
+    setLogPaused: s.setLogPaused,
+    toast: s.toast
+  })))
   const [level, setLevel] = useState<Level>('all')
   const [q, setQ] = useState('')
   const [stick, setStick] = useState(true)
