@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Prism" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/prism_window</item>
+    </style>
+    <color name="prism_window">#0D0D0F</color>
+</resources>

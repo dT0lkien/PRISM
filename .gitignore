@@ -24,3 +24,14 @@ resources/helper/
 .claude/
 CLAUDE.md
 ПАМЯТЬ.md
+
+# Android SDK configuration, build outputs, native core, and signing secrets
+/android/.gradle/
+/android/.kotlin/
+/android/build/
+/android/app/build/
+/android/app/libs/*.aar
+/android/local.properties
+/android/keystore.properties
+/android/*.jks
+/android/*.keystore

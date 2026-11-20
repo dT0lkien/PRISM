@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Prism</string>
+    <string name="prism_tile_label">Prism VPN</string>
+</resources>

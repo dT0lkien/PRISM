@@ -11,6 +11,7 @@ export const TAG_AUTO = 'auto'
 
 export interface BuildContext {
   settings: Settings
+  platform?: 'android'
   nodes: ServerNode[]
   activeNodeId?: string
   appRules: AppRule[]
@@ -39,11 +40,11 @@ function tagFor(action: RuleAction): string | undefined {
 }
 
 /** Matcher[] → поля правила sing-box. null если правило пустое. */
-function matchersToRule(matchers: Matcher[]): Json | null {
+function matchersToRule(matchers: Matcher[], skipProcess = false): Json | null {
   const r: Json = {}
   for (const m of matchers) {
     const vals = m.values.map((v) => v.trim()).filter(Boolean)
-    if (!vals.length) continue
+    if (!vals.length || (skipProcess && (m.kind === 'process' || m.kind === 'process_path'))) continue
     switch (m.kind) {
       case 'process':
         r.process_name = [...(r.process_name ?? []), ...vals]
@@ -143,6 +144,7 @@ export function parseDnsServer(raw: string, tag: string, detour?: string): Json 
 
 export function buildConfig(ctx: BuildContext): Json {
   const { settings: st } = ctx
+  const android = ctx.platform === 'android'
   const usedRuleSets = new Set<string>()
   const routeRules: Json[] = []
 
@@ -169,7 +171,7 @@ export function buildConfig(ctx: BuildContext): Json {
 
   /* ── 3. Правила по приложениям (высший пользовательский приоритет) ── */
   const byAction: Record<RuleAction, string[]> = { proxy: [], direct: [], block: [] }
-  for (const a of ctx.appRules) {
+  for (const a of android ? [] : ctx.appRules) {
     if (a.enabled && a.exe.trim()) byAction[a.action].push(a.exe.trim())
   }
   for (const action of ['block', 'direct', 'proxy'] as RuleAction[]) {
@@ -182,7 +184,7 @@ export function buildConfig(ctx: BuildContext): Json {
   /* ── 4. Пользовательские правила (в порядке списка) ── */
   for (const rule of ctx.customRules) {
     if (!rule.enabled) continue
-    const r = noteRuleSets(matchersToRule(rule.matchers))
+    const r = noteRuleSets(matchersToRule(rule.matchers, android))
     if (!r) continue
     const tag = rule.outboundTag ?? tagFor(rule.action)
     routeRules.push(drop({ ...r, outbound: tag, action: tag ? undefined : 'reject' }))
@@ -195,7 +197,7 @@ export function buildConfig(ctx: BuildContext): Json {
   activePresets.sort((a, b) => order[a!.group] - order[b!.group])
   for (const p of activePresets) {
     for (const pr of p!.rules) {
-      const r = noteRuleSets(matchersToRule(pr.matchers))
+      const r = noteRuleSets(matchersToRule(pr.matchers, android))
       if (!r) continue
       const tag = tagFor(pr.action)
       routeRules.push(drop({ ...r, outbound: tag, action: tag ? undefined : 'reject' }))
@@ -278,15 +280,15 @@ export function buildConfig(ctx: BuildContext): Json {
 
   /* ── Inbounds ── */
   const inbounds: Json[] = []
-  if (st.captureMode === 'tun') {
+  if (android || st.captureMode === 'tun') {
     inbounds.push(
       drop({
         type: 'tun',
         tag: 'tun-in',
         address: st.tun.ipv6 ? ['172.19.0.1/30', 'fdfe:dcba:9876::1/126'] : ['172.19.0.1/30'],
         mtu: st.tun.mtu,
-        auto_route: st.tun.autoRoute,
-        strict_route: st.tun.strictRoute,
+        auto_route: android || st.tun.autoRoute,
+        strict_route: android ? undefined : st.tun.strictRoute,
         stack: st.tun.stack
       })
     )
@@ -297,14 +299,14 @@ export function buildConfig(ctx: BuildContext): Json {
   inbounds.push({
     type: 'mixed',
     tag: 'mixed-in',
-    listen: st.allowLan ? '0.0.0.0' : '127.0.0.1',
+    listen: !android && st.allowLan ? '0.0.0.0' : '127.0.0.1',
     listen_port: st.localPort
   })
 
   /* ── Outbounds ── */
   const nodeOutbounds: Json[] = []
   const nodeTags: string[] = []
-  const seen = new Set<string>()
+  const seen = new Set<string>(android ? [TAG_PROXY, TAG_DIRECT, TAG_AUTO] : [])
   for (const n of ctx.nodes) {
     let tag = n.name?.trim() || `${n.server}:${n.port}`
     // Теги обязаны быть уникальными
@@ -317,7 +319,8 @@ export function buildConfig(ctx: BuildContext): Json {
   }
 
   const activeIdx = ctx.nodes.findIndex((n) => n.id === ctx.activeNodeId)
-  const defaultTag = activeIdx >= 0 ? nodeTags[activeIdx] : nodeTags[0]
+  const defaultTag =
+    android && ctx.activeNodeId === TAG_AUTO ? TAG_AUTO : activeIdx >= 0 ? nodeTags[activeIdx] : nodeTags[0]
 
   const outbounds: Json[] = []
   if (nodeTags.length) {
@@ -369,11 +372,13 @@ export function buildConfig(ctx: BuildContext): Json {
     }),
     experimental: {
       cache_file: { enabled: true, path: ctx.cachePath, store_fakeip: st.dns.fakeIp, store_rdrc: true },
-      clash_api: {
-        external_controller: `127.0.0.1:${st.clashPort}`,
-        secret: ctx.clashSecret,
-        default_mode: 'rule'
-      }
+      ...(android ? {} : {
+        clash_api: {
+          external_controller: `127.0.0.1:${st.clashPort}`,
+          secret: ctx.clashSecret,
+          default_mode: 'rule'
+        }
+      })
     }
   }
 
