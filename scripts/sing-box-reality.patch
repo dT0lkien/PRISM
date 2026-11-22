@@ -1,0 +1,73 @@
+From 8b4a23018b53b62891b832a1c497f70be09c800c Mon Sep 17 00:00:00 2001
+From: mkd47 <mkd47@users.noreply.github.com>
+Date: Tue, 27 Oct 2026 19:58:53 +0800
+Subject: [PATCH] tls/reality: keep paired X25519MLKEM768 ClientHello key share
+
+Xray-core since v26.9.8 rejects REALITY ClientHellos that advertise
+X25519 without the hybrid X25519MLKEM768 key share ahead of it.
+sing-box previously stripped X25519MLKEM768 from every fingerprint,
+which made chrome (and similar) clients fall through to the real
+destination and fail with "reality verification failed" (#4520).
+
+Keep the hybrid group+share when the uTLS fingerprint emits both;
+still strip incomplete pairs so randomized fingerprints stay valid.
+
+Verified locally: stock 1.14.4 fails vs Xray 26.10.21; patched client
+authenticates. Patched client still works vs Xray 26.3.27.
+---
+ common/tls/reality_client.go | 38 +++++++++++++++++++++++++-----------
+ 1 file changed, 27 insertions(+), 11 deletions(-)
+
+diff --git a/common/tls/reality_client.go b/common/tls/reality_client.go
+index be4806fe67c..f6d8328e704 100644
+--- a/common/tls/reality_client.go
++++ b/common/tls/reality_client.go
+@@ -146,21 +146,37 @@ func (e *RealityClientConfig) ClientHandshake(ctx context.Context, conn net.Conn
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	var mlkemCurve, mlkemKeyShare bool
+ 	for _, extension := range uConn.Extensions {
+-		if ce, ok := extension.(*utls.SupportedCurvesExtension); ok {
+-			ce.Curves = common.Filter(ce.Curves, func(curveID utls.CurveID) bool {
+-				return curveID != utls.X25519MLKEM768
+-			})
+-		}
+-		if ks, ok := extension.(*utls.KeyShareExtension); ok {
+-			ks.KeyShares = common.Filter(ks.KeyShares, func(share utls.KeyShare) bool {
+-				return share.Group != utls.X25519MLKEM768
++		switch ext := extension.(type) {
++		case *utls.SupportedCurvesExtension:
++			mlkemCurve = common.Contains(ext.Curves, utls.X25519MLKEM768)
++		case *utls.KeyShareExtension:
++			mlkemKeyShare = common.Any(ext.KeyShares, func(share utls.KeyShare) bool {
++				return share.Group == utls.X25519MLKEM768
+ 			})
+ 		}
+ 	}
+-	err = uConn.BuildHandshakeState()
+-	if err != nil {
+-		return nil, err
++	// Xray-core since v26.9.8 requires this hybrid share ahead of X25519.
++	// Keep X25519MLKEM768 only when the fingerprint sends both the group and the share.
++	// Incomplete pairs are stripped (randomized fingerprints). Fixes #4520.
++	if mlkemCurve != mlkemKeyShare {
++		for _, extension := range uConn.Extensions {
++			if ce, ok := extension.(*utls.SupportedCurvesExtension); ok {
++				ce.Curves = common.Filter(ce.Curves, func(curveID utls.CurveID) bool {
++					return curveID != utls.X25519MLKEM768
++				})
++			}
++			if ks, ok := extension.(*utls.KeyShareExtension); ok {
++				ks.KeyShares = common.Filter(ks.KeyShares, func(share utls.KeyShare) bool {
++					return share.Group != utls.X25519MLKEM768
++				})
++			}
++		}
++		err = uConn.BuildHandshakeState()
++		if err != nil {
++			return nil, err
++		}
+ 	}
+ 
+ 	if len(uConfig.NextProtos) > 0 {

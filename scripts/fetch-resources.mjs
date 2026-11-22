@@ -1,16 +1,20 @@
 /* Скачивает ядро sing-box и драйвер wintun в resources/core.
    Эти файлы не хранятся в git — 100 МБ бинарников навсегда осели бы в истории.
 
-   Запуск:  node scripts/fetch-resources.mjs [--force] [--rules]
+   Запуск:  node scripts/fetch-resources.mjs [--force] [--rules] [--host-only | --windows-only]
      --force  перекачать, даже если файлы уже на месте
      --rules  заодно обновить списки маршрутизации (geosite/geoip) */
 
 import { inflateRawSync, gunzipSync } from 'node:zlib'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 
 const SING_BOX = '1.14.4'
+const WINDOWS_CORE = `${SING_BOX}-prism-reality`
+const SING_BOX_SOURCE = 'c005f35300ce76427dc285481ec5695f5b179cd2'
 // Бинарник 1.14.4 для Apple Silicon требует macOS 26.
 const MAC_CORE = '1.13.15'
 const WINTUN = '0.14.1'
@@ -22,6 +26,7 @@ const WINTUN = '0.14.1'
    2026-09-23 обе сверены со скачанными файлами. Новая версия ядра — новые
    суммы здесь, иначе скрипт откажется работать. */
 const SHA256 = {
+  [SING_BOX_SOURCE]: '1c4d2b3bf261a8d98e1b026be0bbcddbcb3f53bbca77eb15e8f25f7d4e602e59',
   [`sing-box-${SING_BOX}-windows-amd64.zip`]: '99185d75d314a07dbba4a130c8ad986cbeb629a07927975636b341ca61f991df',
   [`sing-box-${MAC_CORE}-darwin-arm64.tar.gz`]: '3452d866834c9572389e5ca73e60d4ee45a7d5b79332188c9a9e533c5fd40a6d',
   [`sing-box-${MAC_CORE}-darwin-amd64.tar.gz`]: '817e04f90f941b718fedd965ff05bfe72abfcc62952888b01751a6dec5547e14',
@@ -121,22 +126,53 @@ function cachedVersion(dir, version) {
   return existsSync(marker) && readFileSync(marker, 'utf8') === version
 }
 
+// Правка REALITY для серверов Xray из https://github.com/SagerNet/sing-box/issues/4520.
+async function buildWindowsCore(patch) {
+  const archive = await getPinned(`https://codeload.github.com/SagerNet/sing-box/tar.gz/${SING_BOX_SOURCE}`)
+  const tmp = mkdtempSync(join(tmpdir(), 'prism-sing-box-'))
+  try {
+    const archivePath = join(tmp, 'source.tar.gz')
+    const patchPath = join(tmp, 'reality.patch')
+    writeFileSync(archivePath, archive)
+    writeFileSync(patchPath, patch)
+    execFileSync('tar', ['-xzf', archivePath, '-C', tmp], { stdio: 'inherit' })
+    const cwd = join(tmp, `sing-box-${SING_BOX_SOURCE}`)
+    execFileSync('git', ['apply', patchPath], { cwd, stdio: 'inherit' })
+    const tags = readFileSync(join(cwd, 'release', 'DEFAULT_BUILD_TAGS_WINDOWS'), 'utf8').trim()
+    const flags = readFileSync(join(cwd, 'release', 'LDFLAGS'), 'utf8').trim().replace(/\s+/g, ' ')
+    const output = join(tmp, 'sing-box.exe')
+    execFileSync('go', [
+      'build', '-mod=readonly', '-trimpath', '-tags', tags,
+      '-ldflags', `-X github.com/sagernet/sing-box/constant.Version=${WINDOWS_CORE} ${flags} -s -w`,
+      '-o', output, './cmd/sing-box'
+    ], {
+      cwd,
+      env: { ...process.env, GOTOOLCHAIN: 'go1.26.5', GOOS: 'windows', GOARCH: 'amd64', CGO_ENABLED: '0' },
+      stdio: 'inherit'
+    })
+    return readFileSync(output)
+  } finally {
+    rmSync(tmp, { recursive: true, force: true })
+  }
+}
+
 async function fetchWindows() {
   const dir = join(ROOT, 'resources/core/win')
-  if (!force && cachedVersion(dir, SING_BOX) && existsSync(join(dir, 'sing-box.exe')) && existsSync(join(dir, 'wintun.dll'))) {
+  const patch = readFileSync(new URL('./sing-box-reality.patch', import.meta.url))
+  const version = `${WINDOWS_CORE}:${createHash('sha256').update(patch).digest('hex')}`
+  if (!force && cachedVersion(dir, version) && existsSync(join(dir, 'sing-box.exe')) && existsSync(join(dir, 'wintun.dll'))) {
     console.log('▸ Ядро для Windows уже на месте (--force чтобы перекачать)')
     return
   }
 
-  console.log(`▸ sing-box ${SING_BOX} для Windows`)
+  console.log(`▸ Сборка sing-box ${WINDOWS_CORE} для Windows`)
+  const exe = await buildWindowsCore(patch)
   const sb = unzip(
     await getPinned(
       `https://github.com/SagerNet/sing-box/releases/download/v${SING_BOX}/sing-box-${SING_BOX}-windows-amd64.zip`
     ),
-    (n) => /\/(sing-box\.exe|libcronet\.dll|LICENSE)$/.test(n)
+    (n) => /\/(libcronet\.dll|LICENSE)$/.test(n)
   )
-  const exe = pick(sb, '/sing-box.exe')
-  if (!exe) throw new Error('в архиве нет sing-box.exe')
   save(dir, 'sing-box.exe', exe)
   const cronet = pick(sb, '/libcronet.dll')
   if (cronet) save(dir, 'libcronet.dll', cronet)
@@ -152,8 +188,8 @@ async function fetchWindows() {
   const dll = wt['wintun/bin/amd64/wintun.dll']
   if (!dll) throw new Error('в архиве wintun нет сборки amd64')
   save(dir, 'wintun.dll', dll)
-  writeFileSync(join(dir, '.core-version'), SING_BOX)
   if (wt['wintun/LICENSE.txt']) save(dir, 'LICENSE-wintun.txt', wt['wintun/LICENSE.txt'])
+  writeFileSync(join(dir, '.core-version'), version)
 }
 
 /* ─────────── ядро под текущую систему (нужно только для тестов) ─────────── */
@@ -233,7 +269,7 @@ async function fetchRules() {
 
 /* ─────────── ─────────── */
 
-await fetchWindows()
-await fetchHost()
+if (!process.argv.includes('--host-only')) await fetchWindows()
+if (!process.argv.includes('--windows-only')) await fetchHost()
 if (withRules) await fetchRules()
 console.log('\nГотово. Дальше: npm run build или npm run pack:win')

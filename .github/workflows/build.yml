@@ -19,7 +19,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Скачать ядро
-        run: node scripts/fetch-resources.mjs
+        run: node scripts/fetch-resources.mjs --host-only
       - name: Типы
         run: npm run typecheck
       - name: Генератор конфигов против настоящего sing-box
@@ -61,8 +61,19 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Скачать ядро и wintun
-        run: node scripts/fetch-resources.mjs
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.5'
+          cache-dependency-path: scripts/sing-box-reality.patch
+      - name: Собрать ядро с исправлением REALITY и скачать wintun
+        run: node scripts/fetch-resources.mjs --windows-only
+      - name: Проверить ядро в пакете ресурсов
+        shell: pwsh
+        run: |
+          $version = & ./resources/core/win/sing-box.exe version
+          if ($LASTEXITCODE -ne 0 -or $version[0] -ne 'sing-box version 1.14.4-prism-reality') {
+            throw "Unexpected sing-box version: $version"
+          }
       - name: Восстановление настроек и серверов на Windows
         run: node scripts/run-store-test.mjs
       - name: Zapret на настоящей Windows — права на каталог и запуск winws.exe
@@ -124,7 +135,7 @@ jobs:
           cache: false
       - run: npm ci
       - name: Скачать ядро
-        run: node scripts/fetch-resources.mjs
+        run: node scripts/fetch-resources.mjs --host-only
       - name: Собрать помощник
         run: npm run build:helper
       - name: Проверить помощник

@@ -329,6 +329,12 @@ Prism запускает ядро отдельным процессом и об�
 с ним, поэтому код самого приложения GPL не наследует. Если хочется исключить любые
 вопросы — проще всего выпустить проект тоже под GPL-3.0.
 
+## Ядро Windows и REALITY
+
+Prism собирает ядро Windows из [исходников sing-box 1.14.4](https://github.com/SagerNet/sing-box/tree/c005f35300ce76427dc285481ec5695f5b179cd2) с [патчем REALITY](scripts/sing-box-reality.patch). Патч сохраняет гибридный ключ `X25519MLKEM768`, если TLS-отпечаток его поддерживает. Он нужен для совместимости с новыми серверами Xray. [Обсуждение в sing-box](https://github.com/SagerNet/sing-box/issues/4520)
+
+Для локальной сборки Windows нужны Go 1.26.5, Git и `tar`. Команда `npm run pack:win` сама подготовит ядро. Для подготовки ядра только текущей системы macOS или Linux используйте `npm run setup -- --host-only`.
+
 ## Автосборка
 
 `.github/workflows/build.yml` на каждый push собирает проект **на настоящей Windows**
